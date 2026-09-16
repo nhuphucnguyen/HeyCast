@@ -105,11 +105,27 @@ struct ClipboardPageView: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
                 }
+                Text(metaLine(for: selected))
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.theme.textColor.alpha(0.5))
+                    .lineLimit(1)
             } else {
                 Spacer()
             }
         }
         .padding(.leading, 10)
+    }
+
+    /// "Copied from Safari · copied 3 times · 14:32" — parts are omitted
+    /// when unknown (entries predating source tracking have neither).
+    private func metaLine(for entry: ClipboardEntry) -> String {
+        var parts: [String] = []
+        if let name = entry.sourceName { parts.append("Copied from \(name)") }
+        if entry.copies > 1 { parts.append("copied \(entry.copies) times") }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        parts.append(formatter.string(from: entry.createdAt))
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -120,15 +136,18 @@ private struct ClipboardRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: iconName)
-                .font(.system(size: 12))
-                .foregroundStyle(model.theme.textColor.alpha(0.8))
-                .frame(width: 16)
+            rowIcon
+                .frame(width: 16, height: 16)
             Text(entry.preview)
                 .font(.system(size: 13))
                 .foregroundStyle(model.theme.textColor)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            if entry.copies > 1 {
+                Text("×\(entry.copies)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(model.theme.textColor.alpha(0.45))
+            }
         }
         .padding(.horizontal, 8)
         .frame(height: 34)
@@ -138,11 +157,42 @@ private struct ClipboardRow: View {
         )
     }
 
+    // Show the app the copy came from (Maccy-style) when known; fall back
+    // to a content-kind symbol for entries copied before source tracking.
+    @ViewBuilder
+    private var rowIcon: some View {
+        if let icon = ClipboardSourceIcons.icon(for: entry.sourceBundleID) {
+            Image(nsImage: icon)
+                .resizable()
+        } else {
+            Image(systemName: iconName)
+                .font(.system(size: 12))
+                .foregroundStyle(model.theme.textColor.alpha(0.8))
+        }
+    }
+
     private var iconName: String {
         switch entry.kind {
         case .text: return "doc.plaintext"
         case .url: return "link"
         case .image: return "photo"
         }
+    }
+}
+
+/// Resolves bundle ids to small app icons, cached by bundle id.
+enum ClipboardSourceIcons {
+    private static let cache = NSCache<NSString, NSImage>()
+
+    static func icon(for bundleID: String?) -> NSImage? {
+        guard let bundleID else { return nil }
+        if let hit = cache.object(forKey: bundleID as NSString) { return hit }
+        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = (NSWorkspace.shared.icon(forFile: appURL.path).copy() as? NSImage) ?? NSWorkspace.shared.icon(forFile: appURL.path)
+        icon.size = NSSize(width: 15, height: 15)
+        cache.setObject(icon, forKey: bundleID as NSString)
+        return icon
     }
 }

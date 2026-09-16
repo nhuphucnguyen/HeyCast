@@ -39,6 +39,25 @@ struct ThemeConfig: Codable {
     var backgroundColor: String? = nil  // hex like "#101014", overrides preset
     var textColor: String? = nil
     var fontName: String? = nil
+
+    init() {}
+
+    // Tolerant decoding: a config written by an older build (missing keys)
+    // must fall back to the declared defaults instead of failing the whole
+    // file — the synthesized decoder throws keyNotFound for missing keys,
+    // which used to reset every setting whenever a new field shipped.
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let raw = try c.decodeIfPresent(String.self, forKey: .mode),
+           let value = ThemeMode(rawValue: raw) { mode = value }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .blur) { blur = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .showIcons) { showIcons = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .showScrollBar) { showScrollBar = v }
+        backgroundColor = try c.decodeIfPresent(String.self, forKey: .backgroundColor)
+        textColor = try c.decodeIfPresent(String.self, forKey: .textColor)
+        fontName = try c.decodeIfPresent(String.self, forKey: .fontName)
+    }
 }
 
 struct Config: Codable {
@@ -57,6 +76,8 @@ struct Config: Codable {
     var showOnStartup: Bool = false
     var clipboardHistoryEnabled: Bool = true
     var clipboardPasteOnSelect: Bool = false
+    var clipboardCapturePaused: Bool = false
+    var clipboardHistorySize: Int = 200
     var shells: [ShellCommandConfig] = []
     var modes: [String: String] = [:]
     var aliases: [String: String] = [:]
@@ -66,6 +87,43 @@ struct Config: Codable {
     var eventDurationMinutes: Int = 60
     var inputSourceOnOpen: String? = nil
     var restoreInputSourceOnClose: Bool = true
+
+    init() {}
+
+    // Tolerant decoding — see ThemeConfig.init(from:). Invalid enum values
+    // also fall back to their defaults instead of discarding the file.
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let v = try c.decodeIfPresent(String.self, forKey: .toggleHotkey) { toggleHotkey = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .clipboardHotkey) { clipboardHotkey = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .placeholder) { placeholder = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .searchURL) { searchURL = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .hapticFeedback) { hapticFeedback = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .showTrayIcon) { showTrayIcon = v }
+        theme = try c.decodeIfPresent(ThemeConfig.self, forKey: .theme) ?? theme
+        if let raw = try c.decodeIfPresent(String.self, forKey: .windowLocation),
+           let v = WindowLocation(rawValue: raw) { windowLocation = v }
+        if let raw = try c.decodeIfPresent(String.self, forKey: .mainPage),
+           let v = MainPane(rawValue: raw) { mainPage = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clearOnHide) { clearOnHide = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clearOnEnter) { clearOnEnter = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .startAtLogin) { startAtLogin = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .showOnStartup) { showOnStartup = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardHistoryEnabled) { clipboardHistoryEnabled = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardPasteOnSelect) { clipboardPasteOnSelect = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardCapturePaused) { clipboardCapturePaused = v }
+        if let v = try c.decodeIfPresent(Int.self, forKey: .clipboardHistorySize), (10...1000).contains(v) { clipboardHistorySize = v }
+        if let v = try c.decodeIfPresent([ShellCommandConfig].self, forKey: .shells) { shells = v }
+        if let v = try c.decodeIfPresent([String: String].self, forKey: .modes) { modes = v }
+        if let v = try c.decodeIfPresent([String: String].self, forKey: .aliases) { aliases = v }
+        if let v = try c.decodeIfPresent([String].self, forKey: .searchDirs) { searchDirs = v }
+        if let v = try c.decodeIfPresent([String].self, forKey: .blacklist) { blacklist = v }
+        if let v = try c.decodeIfPresent(Int.self, forKey: .debounceDelayMS) { debounceDelayMS = v }
+        if let v = try c.decodeIfPresent(Int.self, forKey: .eventDurationMinutes) { eventDurationMinutes = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .inputSourceOnOpen) { inputSourceOnOpen = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .restoreInputSourceOnClose) { restoreInputSourceOnClose = v }
+    }
 
     static let directory: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -88,6 +146,7 @@ struct Config: Codable {
             // Keep valid parts by decoding field-by-field is overkill; fall back
             // to defaults but preserve the broken file for the user to inspect.
             let backup = directory.appendingPathComponent("config.json.invalid")
+            try? FileManager.default.removeItem(at: backup)
             try? FileManager.default.copyItem(at: fileURL, to: backup)
             return defaults
         }

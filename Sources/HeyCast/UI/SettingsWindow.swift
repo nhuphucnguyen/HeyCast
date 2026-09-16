@@ -14,7 +14,6 @@ final class SettingsWindowController {
         self.model = model
         if window == nil {
             NSLog("HeyCast: creating settings window")
-            let content = SettingsView(model: model)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
                 styleMask: [.titled, .closable],
@@ -26,9 +25,11 @@ final class SettingsWindowController {
             window.isReleasedWhenClosed = false
             window.center()
             window.level = .floating
-            window.contentView = NSHostingView(rootView: content)
             self.window = window
         }
+        // Rebuild the view on every open so the draft reflects changes made
+        // elsewhere (tray menu, edited config.json + Refresh) while closed.
+        window?.contentView = NSHostingView(rootView: SettingsView(model: model))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
@@ -55,6 +56,7 @@ struct SettingsView: View {
     var body: some View {
         TabView {
             generalTab.tabItem { Label("General", systemImage: "switch.2") }
+            clipboardTab.tabItem { Label("Clipboard", systemImage: "clipboard") }
             appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }
             commandsTab.tabItem { Label("Commands", systemImage: "terminal") }
         }
@@ -90,18 +92,42 @@ struct SettingsView: View {
             }
             Section("Hotkeys") {
                 TextField("Toggle hotkey (e.g. ALT+SPACE)", text: $draft.toggleHotkey).onSubmit { persist() }
-                TextField("Clipboard hotkey (e.g. SUPER+SHIFT+C)", text: $draft.clipboardHotkey).onSubmit { persist() }
             }
             Section("Behavior") {
                 Toggle("Haptic feedback while typing", isOn: $draft.hapticFeedback).onChange(of: draft.hapticFeedback) { _ in persist() }
-                Toggle("Clipboard history", isOn: $draft.clipboardHistoryEnabled).onChange(of: draft.clipboardHistoryEnabled) { _ in persist() }
-                Toggle("Paste on clipboard select", isOn: $draft.clipboardPasteOnSelect).onChange(of: draft.clipboardPasteOnSelect) { _ in persist() }
                 Toggle("Clear search on hide", isOn: $draft.clearOnHide).onChange(of: draft.clearOnHide) { _ in persist() }
                 Toggle("Hide window after opening a result", isOn: $draft.clearOnEnter).onChange(of: draft.clearOnEnter) { _ in persist() }
                 Toggle("Start at login", isOn: $draft.startAtLogin).onChange(of: draft.startAtLogin) { newValue in
                     persist()
                     LoginItemService.setEnabled(newValue)
                 }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    // MARK: clipboard
+
+    private var clipboardTab: some View {
+        Form {
+            Section("History") {
+                Toggle("Save clipboard history", isOn: $draft.clipboardHistoryEnabled)
+                    .onChange(of: draft.clipboardHistoryEnabled) { _ in persist() }
+                Toggle("Pause capture (existing history stays available)", isOn: $draft.clipboardCapturePaused)
+                    .disabled(!draft.clipboardHistoryEnabled)
+                    .onChange(of: draft.clipboardCapturePaused) { _ in persist() }
+                Stepper(value: $draft.clipboardHistorySize, in: 10...1000, step: 10) {
+                    Text("Keep last \(draft.clipboardHistorySize) entries")
+                }
+                .disabled(!draft.clipboardHistoryEnabled)
+                .onChange(of: draft.clipboardHistorySize) { _ in persist() }
+                Button("Clear History") { model.clearClipboard() }
+            }
+            Section("Selecting entries") {
+                TextField("Open clipboard hotkey (e.g. SUPER+SHIFT+C)", text: $draft.clipboardHotkey)
+                    .onSubmit { persist() }
+                Toggle("Paste into previous app on select", isOn: $draft.clipboardPasteOnSelect)
+                    .onChange(of: draft.clipboardPasteOnSelect) { _ in persist() }
             }
         }
         .formStyle(.grouped)
