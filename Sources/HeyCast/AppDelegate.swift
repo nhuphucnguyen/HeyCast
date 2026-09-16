@@ -94,6 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                model.filteredClipboardItems.indices.contains(model.selectedIndex) {
                 model.toggleClipboardPin(model.filteredClipboardItems[model.selectedIndex])
             }
+        case "enter":
+            // Same as pressing return on the highlighted row.
+            model.openFocused()
         case "esc":
             model.escPressed()
         case "page":
