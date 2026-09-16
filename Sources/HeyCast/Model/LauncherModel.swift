@@ -618,26 +618,37 @@ final class LauncherModel: ObservableObject {
 
     func handleClipboardCapture(_ capture: ClipboardService.Capture) {
         guard config.clipboardHistoryEnabled else { return }
-        let entry: ClipboardEntry
+        let content: (kind: ClipboardEntry.Kind, text: String?, imageData: Data?)
         switch capture.content {
-        case .text(let t): entry = ClipboardEntry(id: 0, kind: .text, text: t, imageData: nil, createdAt: Date())
-        case .url(let t): entry = ClipboardEntry(id: 0, kind: .url, text: t, imageData: nil, createdAt: Date())
-        case .image(let data): entry = ClipboardEntry(id: 0, kind: .image, text: nil, imageData: data, createdAt: Date())
+        case .text(let t): content = (.text, t, nil)
+        case .url(let t): content = (.url, t, nil)
+        case .image(let data): content = (.image, nil, data)
         }
         // dedupe: move existing equal content to the top
         if let existingIndex = clipboardItems.firstIndex(where: {
-            $0.kind == entry.kind && $0.text == entry.text && $0.imageData == entry.imageData
+            $0.kind == content.kind && $0.text == content.text && $0.imageData == content.imageData
         }) {
             let existing = clipboardItems.remove(at: existingIndex)
             clipboardItems.insert(existing, at: 0)
             return
         }
-        clipboardStore.insert(kind: entry.kind, text: entry.text, imageData: entry.imageData)
+        // Entries need a unique, stable ID for SwiftUI identity: use the
+        // SQLite row id, falling back to a negative counter if the write failed.
+        let id = clipboardStore.insert(kind: content.kind, text: content.text, imageData: content.imageData)
+            ?? nextFallbackClipboardID()
+        let entry = ClipboardEntry(id: id, kind: content.kind, text: content.text,
+                                   imageData: content.imageData, createdAt: Date())
         clipboardItems.insert(entry, at: 0)
         if clipboardItems.count > 300 {
             clipboardItems.removeLast(clipboardItems.count - 300)
         }
     }
+
+    private func nextFallbackClipboardID() -> Int64 {
+        fallbackClipboardID -= 1
+        return fallbackClipboardID
+    }
+    private var fallbackClipboardID: Int64 = 0
 
     // MARK: - hotkeys
 

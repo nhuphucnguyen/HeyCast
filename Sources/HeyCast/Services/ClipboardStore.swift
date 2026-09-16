@@ -58,7 +58,10 @@ final class ClipboardStore {
         return sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
     }
 
-    func insert(kind: ClipboardEntry.Kind, text: String?, imageData: Data?) {
+    /// Inserts an entry and returns the new row id (nil if the write failed).
+    @discardableResult
+    func insert(kind: ClipboardEntry.Kind, text: String?, imageData: Data?) -> Int64? {
+        var rowID: Int64?
         queue.sync { [weak self] in
             guard let self, let db = self.db else { return }
             var stmt: OpaquePointer?
@@ -75,15 +78,20 @@ final class ClipboardStore {
             }
             if let imageData {
                 _ = imageData.withUnsafeBytes { buf in
-                    sqlite3_bind_blob(stmt, 3, buf.baseAddress, Int32(buf.count), nil)
+                    // TRANSIENT: SQLite copies immediately; the buffer leaves
+                    // scope before sqlite3_step runs.
+                    sqlite3_bind_blob(stmt, 3, buf.baseAddress, Int32(buf.count), SQLITE_TRANSIENT)
                 }
             } else {
                 sqlite3_bind_null(stmt, 3)
             }
             sqlite3_bind_int64(stmt, 4, now)
             sqlite3_bind_int64(stmt, 5, Int64(size))
-            _ = sqlite3_step(stmt)
+            if sqlite3_step(stmt) == SQLITE_DONE {
+                rowID = sqlite3_last_insert_rowid(db)
+            }
         }
+        return rowID
     }
 
     func load(limit: Int) -> [ClipboardEntry] {
