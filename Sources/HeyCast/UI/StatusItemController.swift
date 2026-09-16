@@ -48,6 +48,15 @@ final class StatusItemController {
         refresh.target = self
         menu.addItem(refresh)
 
+        // Maccy's "ignore events": pause capture without hiding old history.
+        if model?.config.clipboardHistoryEnabled == true {
+            let paused = model?.config.clipboardCapturePaused ?? false
+            let pause = NSMenuItem(title: paused ? "Resume Clipboard History" : "Pause Clipboard History",
+                                   action: #selector(toggleClipboardPause), keyEquivalent: "")
+            pause.target = self
+            menu.addItem(pause)
+        }
+
         if let model, !model.config.modes.isEmpty {
             let modesMenu = NSMenu()
             for name in model.config.modes.keys.sorted() {
@@ -83,6 +92,12 @@ final class StatusItemController {
     @objc private func toggleView() { model?.toggle() }
     @objc private func openSettings() { AppDelegate.shared?.showSettings() }
     @objc private func refreshConfig() { model?.reloadConfig() }
+    @objc private func toggleClipboardPause() {
+        guard let model else { return }
+        model.config.clipboardCapturePaused.toggle()
+        model.config.save()
+        statusItem?.menu = buildMenu()
+    }
     @objc private func switchMode(_ sender: NSMenuItem) {
         guard let model, let name = sender.representedObject as? String,
               let command = model.config.modes[name] else { return }

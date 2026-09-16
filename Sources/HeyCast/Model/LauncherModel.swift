@@ -61,7 +61,7 @@ final class LauncherModel: ObservableObject {
         observeSystemAppearance()
         fileSearchService.onUpdate = { [weak self] in self?.fileSearchUpdated() }
 
-        clipboardItems = clipboardStore.load(limit: 300)
+        clipboardItems = clipboardStore.load(limit: config.clipboardHistorySize)
 
         emojiIndex.load { [weak self] in
             guard let self, self.page == .emoji else { return }
@@ -617,31 +617,35 @@ final class LauncherModel: ObservableObject {
     // MARK: - clipboard capture
 
     func handleClipboardCapture(_ capture: ClipboardService.Capture) {
-        guard config.clipboardHistoryEnabled else { return }
+        guard config.clipboardHistoryEnabled, !config.clipboardCapturePaused else { return }
         let content: (kind: ClipboardEntry.Kind, text: String?, imageData: Data?)
         switch capture.content {
         case .text(let t): content = (.text, t, nil)
         case .url(let t): content = (.url, t, nil)
         case .image(let data): content = (.image, nil, data)
         }
-        // dedupe: move existing equal content to the top
-        if let existingIndex = clipboardItems.firstIndex(where: {
-            $0.kind == content.kind && $0.text == content.text && $0.imageData == content.imageData
-        }) {
-            let existing = clipboardItems.remove(at: existingIndex)
+        // Maccy-style dedup: a repeat copy promotes the existing entry
+        // (refreshing its timestamp + copy count) instead of adding a row.
+        if let existing = clipboardStore.touchExisting(kind: content.kind, text: content.text,
+                                                       imageData: content.imageData) {
+            clipboardItems.removeAll { $0.id == existing.id }
             clipboardItems.insert(existing, at: 0)
             return
         }
         // Entries need a unique, stable ID for SwiftUI identity: use the
         // SQLite row id, falling back to a negative counter if the write failed.
-        let id = clipboardStore.insert(kind: content.kind, text: content.text, imageData: content.imageData)
+        let source = capture.source
+        let id = clipboardStore.insert(kind: content.kind, text: content.text, imageData: content.imageData,
+                                       sourceBundleID: source?.bundleID, sourceName: source?.name)
             ?? nextFallbackClipboardID()
         let entry = ClipboardEntry(id: id, kind: content.kind, text: content.text,
-                                   imageData: content.imageData, createdAt: Date())
+                                   imageData: content.imageData, createdAt: Date(),
+                                   sourceBundleID: source?.bundleID, sourceName: source?.name)
         clipboardItems.insert(entry, at: 0)
-        if clipboardItems.count > 300 {
-            clipboardItems.removeLast(clipboardItems.count - 300)
+        if clipboardItems.count > config.clipboardHistorySize {
+            clipboardItems.removeLast(clipboardItems.count - config.clipboardHistorySize)
         }
+        clipboardStore.prune(keep: config.clipboardHistorySize)
     }
 
     private func nextFallbackClipboardID() -> Int64 {
