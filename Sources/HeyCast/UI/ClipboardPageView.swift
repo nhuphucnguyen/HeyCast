@@ -23,7 +23,8 @@ struct ClipboardPageView: View {
                         ScrollView {
                             LazyVStack(spacing: 2) {
                                 ForEach(Array(items.enumerated()), id: \.element.id) { index, entry in
-                                    ClipboardRow(model: model, entry: entry, isSelected: index == model.selectedIndex)
+                                    ClipboardRow(model: model, entry: entry, index: index,
+                                                 isSelected: index == model.selectedIndex)
                                         .id(entry.id)
                                         .onTapGesture {
                                             model.selectedIndex = index
@@ -140,6 +141,7 @@ struct ClipboardPageView: View {
 private struct ClipboardRow: View {
     @ObservedObject var model: LauncherModel
     let entry: ClipboardEntry
+    let index: Int
     let isSelected: Bool
 
     var body: some View {
@@ -151,6 +153,13 @@ private struct ClipboardRow: View {
                 .foregroundStyle(model.theme.textColor)
                 .lineLimit(1)
             Spacer(minLength: 0)
+            // Maccy-style hint: the first nine entries respond to ⌘1…⌘9.
+            if index < 9 {
+                Text("\(index + 1)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(model.theme.textColor.alpha(0.35))
+                    .frame(width: 10)
+            }
             if entry.copies > 1 {
                 Text("×\(entry.copies)")
                     .font(.system(size: 11))
