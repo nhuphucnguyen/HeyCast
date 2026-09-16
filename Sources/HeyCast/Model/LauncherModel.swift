@@ -16,6 +16,9 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var mode = "default"
     @Published private(set) var theme: Theme
     @Published private(set) var clipboardItems: [ClipboardEntry] = []
+    @Published private(set) var assistantMessages: [AssistantMessage] = []
+    @Published private(set) var assistantUnread = 0
+    @Published var selectedAssistantID: Int64? = nil
     @Published private(set) var emojiResults: [EmojiEntry] = []
     @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
@@ -36,6 +39,7 @@ final class LauncherModel: ObservableObject {
     let appIndex = AppIndex()
     let emojiIndex = EmojiIndex()
     let clipboardStore = ClipboardStore()
+    let assistantService = AssistantService()
     let fileSearchService = FileSearchService()
     let calendarService = CalendarService()
 
@@ -46,6 +50,7 @@ final class LauncherModel: ObservableObject {
     var onHidePanel: (() -> Void)?
     var onOpenSettings: (() -> Void)?
     var onLayoutChanged: (() -> Void)?
+    var onAssistantUnread: ((Int) -> Void)?
     private var shellHotkeys: [Shortcut: ShellCommandConfig] = [:]
     private var rankingSaveTask: Task<Void, Never>?
     private var fileSearchDebounceTask: Task<Void, Never>?
@@ -62,6 +67,9 @@ final class LauncherModel: ObservableObject {
         fileSearchService.onUpdate = { [weak self] in self?.fileSearchUpdated() }
 
         clipboardItems = clipboardStore.load(limit: config.clipboardHistorySize)
+        assistantMessages = assistantService.store.load()
+        assistantUnread = assistantService.store.unreadCount()
+        assistantService.onUpdated = { [weak self] in self?.assistantUpdated() }
 
         emojiIndex.load { [weak self] in
             guard let self, self.page == .emoji else { return }
@@ -145,6 +153,7 @@ final class LauncherModel: ObservableObject {
         case .emoji: return emojiResults.count
         case .clipboard: return filteredClipboardItems.count
         case .files: return fileResults.count
+        case .assistant: return assistantMessages.count
         case .main: return results.count
         }
     }
@@ -177,6 +186,15 @@ final class LauncherModel: ObservableObject {
         case .emoji:
             guard emojiResults.indices.contains(selectedIndex) else { return }
             copyText(emojiResults[selectedIndex].character)
+        case .assistant:
+            // With a query: ask the default agent. Without: read the
+            // highlighted inbox entry (marks it viewed).
+            let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                sendToDefaultAgent(text)
+            } else if assistantMessages.indices.contains(selectedIndex) {
+                openAssistantMessage(assistantMessages[selectedIndex])
+            }
         }
     }
 
@@ -212,6 +230,8 @@ final class LauncherModel: ObservableObject {
         case .clipboard:
             selectedIndex = 0
             clipboardPreviewIndex = nil
+        case .assistant:
+            selectedIndex = 0
         }
         onLayoutChanged?()
     }
@@ -478,6 +498,8 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("face.smiling"), searchName: "emoji", action: .switchPage(.emoji)),
             ResultItem(id: "builtin-clipboard", title: "Clipboard History", subtitle: "Clipboard",
                        icon: .symbol("clipboard"), searchName: "clipboard", action: .switchPage(.clipboard)),
+            ResultItem(id: "builtin-assistant", title: "Assistant", subtitle: "Ask an agent — answers land in your inbox",
+                       icon: .symbol("sparkles"), searchName: "assistant", action: .switchPage(.assistant)),
             ResultItem(id: "builtin-files", title: "Search for a file", subtitle: "File search",
                        icon: .symbol("folder"), searchName: "file search", action: .switchPage(.files)),
             ResultItem(id: "builtin-reload", title: "Reload HeyCast", subtitle: "Reloads config & apps",
@@ -687,6 +709,81 @@ final class LauncherModel: ObservableObject {
     }
     private var fallbackClipboardID: Int64 = 0
 
+    // MARK: - assistant (fire-and-forget agents)
+
+    private func assistantUpdated() {
+        assistantMessages = assistantService.store.load()
+        assistantUnread = assistantService.store.unreadCount()
+        onAssistantUnread?(assistantUnread)
+    }
+
+    private func agent(forAlias alias: String) -> AgentConfig? {
+        config.agents.first { $0.alias.lowercased() == alias.lowercased() }
+            ?? config.agents.first { $0.name.lowercased() == alias.lowercased() }
+    }
+
+    /// Routes "@alias question" typed in the main bar; nil when the query
+    /// isn't an agent request (or the alias is unknown).
+    private func agentRequest(in query: String) -> (agent: AgentConfig, text: String)? {
+        guard query.hasPrefix("@"), let space = query.firstIndex(of: " ") else { return nil }
+        let alias = String(query[query.index(after: query.startIndex)..<space])
+        guard let agent = agent(forAlias: alias) else { return nil }
+        let text = query[query.index(after: space)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : (agent, text)
+    }
+
+    @discardableResult
+    func sendToAgent(alias: String, text: String) -> Bool {
+        guard let agent = agent(forAlias: alias) else { return false }
+        assistantService.send(agent: agent, text: text)
+        assistantUpdated()
+        return true
+    }
+
+    /// ⌘↵ in the main bar and Enter on the assistant page.
+    func sendToDefaultAgent(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let agent = config.agents.first { $0.alias == config.defaultAgent } ?? config.agents.first
+        guard let agent else { return }
+        assistantService.send(agent: agent, text: trimmed)
+        assistantUpdated()
+        query = ""
+        hide()
+    }
+
+    /// Main-bar entry point: an "@alias question" sends immediately (the
+    /// panel hides and the answer lands in the inbox + a notification).
+    func handleMainSubmit() {
+        if let request = agentRequest(in: query) {
+            assistantService.send(agent: request.agent, text: request.text)
+            assistantUpdated()
+            query = ""
+            hide()
+        } else {
+            openFocused()
+        }
+    }
+
+    func openAssistantMessage(_ message: AssistantMessage) {
+        assistantService.store.markViewed(id: message.id)
+        selectedAssistantID = message.id
+        assistantUpdated()
+    }
+
+    func retryAssistantMessage(_ message: AssistantMessage) {
+        // Prefer the current config for this agent so a fixed URL/key applies.
+        let configured = config.agents.first { $0.name == message.agent }
+            ?? config.agents.first { $0.alias == config.defaultAgent }
+        assistantService.retry(message: message, agent: configured)
+        assistantUpdated()
+    }
+
+    func deleteAssistantMessage(_ message: AssistantMessage) {
+        assistantService.store.delete(id: message.id)
+        assistantUpdated()
+    }
+
     // MARK: - hotkeys
 
     private func applyHotkeys() {
@@ -768,6 +865,8 @@ final class LauncherModel: ObservableObject {
             return NSSize(width: Self.windowWidth, height: height)
         case .clipboard:
             return NSSize(width: Self.clipboardWindowWidth, height: 480)
+        case .assistant:
+            return NSSize(width: Self.clipboardWindowWidth, height: 480)
         }
     }
 
@@ -785,6 +884,7 @@ final class LauncherModel: ObservableObject {
             return count == 1 ? "1 result found" : "\(count) results found"
         case .clipboard: return "Clipboard history"
         case .emoji: return "Emoji search"
+        case .assistant: return "Assistant inbox"
         }
     }
 

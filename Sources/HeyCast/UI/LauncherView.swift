@@ -43,6 +43,7 @@ struct LauncherView: View {
         case .main, .files: return true
         case .emoji: return true
         case .clipboard: return true
+        case .assistant: return true
         }
     }
 
@@ -56,7 +57,7 @@ struct LauncherView: View {
                 .textFieldStyle(.plain)
                 .font(Font(model.theme.uiFont(size: 19)))
                 .foregroundStyle(model.theme.textColor)
-                .onSubmit { model.openFocused() }
+                .onSubmit { model.handleMainSubmit() }
             if !model.query.isEmpty {
                 Button {
                     model.query = ""
@@ -81,6 +82,7 @@ struct LauncherView: View {
         case .files: return "folder"
         case .clipboard: return "clipboard"
         case .emoji: return "face.smiling"
+        case .assistant: return "sparkles"
         }
     }
 
@@ -91,6 +93,7 @@ struct LauncherView: View {
         case .files: fileList
         case .emoji: EmojiGridView(model: model)
         case .clipboard: ClipboardPageView(model: model)
+        case .assistant: AssistantPageView(model: model)
         }
     }
 
@@ -159,6 +162,7 @@ struct LauncherView: View {
         case .files: return "File search"
         case .clipboard: return "Clipboard"
         case .emoji: return "Emoji"
+        case .assistant: return "Assistant"
         }
     }
 }

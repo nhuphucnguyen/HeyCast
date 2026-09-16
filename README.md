@@ -34,6 +34,29 @@ pure Apple frameworks so every feature leans on the platform directly.
   transient markers), each entry records the source app, and history is capped
   (200 by default, configurable).
 - Emoji search — 6-wide grid, hover tooltips, Enter copies
+- Assistant — fire-and-forget AI requests with an inbox. Configure agents
+  (Hermes, any OpenAI-compatible API, the Anthropic API, or an MCP
+  streamable-HTTP server) in Settings → Assistant, then:
+  - `@alias your question` + Enter from anywhere, or ⌘↵ for the default
+    agent, or type + Enter on the Assistant page
+  - the panel dismisses immediately; when the answer lands you get a
+    macOS notification, and the response waits in the Assistant inbox
+    (unread dot + badge on the menu bar icon) until you read it
+  - `heycast://ask?text=…&agent=alias` does the same from scripts
+  - failed requests get a Retry button
+
+  ```json
+  "agents": [
+    { "name": "Hermes", "alias": "hermes", "type": "mcp",
+      "baseURL": "https://hermes.example.com/mcp", "apiKey": "…" },
+    { "name": "GPT", "alias": "gpt", "type": "openai",
+      "baseURL": "https://api.openai.com/v1", "model": "gpt-4o-mini", "apiKey": "sk-…" }
+  ],
+  "defaultAgent": "hermes"
+  ```
+
+  API keys live in config.json for now (Keychain storage and OAuth for
+  MCP servers are planned).
 
 **Platform-native plumbing**
 - Global hotkeys via Carbon `RegisterEventHotKey` — no permissions needed

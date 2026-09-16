@@ -31,6 +31,20 @@ struct ShellCommandConfig: Codable, Equatable {
     var iconPath: String?
 }
 
+/// A chat/agent endpoint reachable from the Assistant page. Hermes is one
+/// example; any OpenAI-compatible API, the Anthropic API, or an MCP
+/// streamable-HTTP server works. API keys live in config.json for now
+/// (Keychain hardening is a planned follow-up).
+struct AgentConfig: Codable, Equatable {
+    var name: String                    // display name, e.g. "Hermes"
+    var alias: String                   // "@alias question" routing prefix
+    var type: String = "openai"         // openai | anthropic | mcp
+    var baseURL: String                 // openai: incl. /v1; mcp: endpoint URL
+    var model: String? = nil            // openai/anthropic model id
+    var tool: String? = nil             // mcp: tool to call (else first listed)
+    var apiKey: String? = nil           // Bearer / x-api-key; oauth: phase 2
+}
+
 struct ThemeConfig: Codable {
     var mode: ThemeMode = .dark
     var blur: Bool = true
@@ -87,6 +101,8 @@ struct Config: Codable {
     var eventDurationMinutes: Int = 60
     var inputSourceOnOpen: String? = nil
     var restoreInputSourceOnClose: Bool = true
+    var agents: [AgentConfig] = []
+    var defaultAgent: String? = nil  // alias of the agent ⌘↵ / the ask page use
 
     init() {}
 
@@ -123,6 +139,8 @@ struct Config: Codable {
         if let v = try c.decodeIfPresent(Int.self, forKey: .eventDurationMinutes) { eventDurationMinutes = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .inputSourceOnOpen) { inputSourceOnOpen = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .restoreInputSourceOnClose) { restoreInputSourceOnClose = v }
+        if let v = try c.decodeIfPresent([AgentConfig].self, forKey: .agents) { agents = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .defaultAgent) { defaultAgent = v }
     }
 
     static let directory: URL = {
