@@ -12,9 +12,6 @@ import unicodedata
 BLOCKS = [
     (0x2600, 0x27BF),   # Misc symbols + dingbats (☀ ✂ ✅ ...)
     (0x2B00, 0x2B5F),   # arrows/stars (⭐ ⭑)
-    (0x1F10D, 0x1F10F),
-    (0x1F16D, 0x1F171),
-    (0x1F200, 0x1F2FF), # enclosed ideographs (🈯)
     (0x1F300, 0x1F5FF), # misc symbols and pictographs
     (0x1F600, 0x1F64F), # emoticons
     (0x1F680, 0x1F6FF), # transport and map

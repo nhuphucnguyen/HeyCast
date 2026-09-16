@@ -13,6 +13,7 @@ final class SettingsWindowController {
     func show(model: LauncherModel) {
         self.model = model
         if window == nil {
+            NSLog("SwiftCast: creating settings window")
             let content = SettingsView(model: model)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
@@ -30,6 +31,7 @@ final class SettingsWindowController {
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        NSLog("SwiftCast: settings window shown (visible: \(window?.isVisible ?? false))")
     }
 
     func hide() {

@@ -20,11 +20,14 @@ final class PanelController: NSObject, NSWindowDelegate {
         self.model = model
         self.panel = LauncherPanel(
             contentRect: NSRect(x: 0, y: 0, width: LauncherModel.windowWidth, height: 150),
-            styleMask: [.borderless, .nonactivatingPanel],
+            styleMask: [.borderless, .titled],
             backing: .buffered,
             defer: false
         )
         super.init()
+
+        panel.titlebarAppearsTransparent = true
+        panel.titleVisibility = .hidden
 
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -81,14 +84,17 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: show/hide
 
     private func showPanel() {
+        NSLog("SwiftCast: showPanel (frame before: \(panel.frame))")
         positionPanelIfNeeded()
         resizeToFitContent()
-        panel.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
         isPositionedOnce = true
+        NSLog("SwiftCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
     }
 
     private func hidePanel() {
+        NSLog("SwiftCast: hidePanel called")
         panel.orderOut(nil)
     }
 
@@ -222,6 +228,34 @@ final class PanelController: NSObject, NSWindowDelegate {
     func refreshTheme() {
         panel.appearance = NSAppearance(named: model.theme.isDark ? .darkAqua : .aqua)
         applyThemeBackground()
+    }
+
+    /// Capture this window's rendered content (allowed for the owning process
+    /// without Screen Recording permission).
+    func capturePanel(to url: URL) {
+        captureWindow(panel, to: url)
+    }
+
+    /// Capture every app window (panel + settings) to /tmp for verification.
+    func captureAllWindows() {
+        for (index, window) in NSApp.windows.enumerated() where window.isVisible && window.frame.width > 1 && window.windowNumber > 0 {
+            let label = window == panel ? "panel" : "win\(index)"
+            captureWindow(window, to: URL(fileURLWithPath: "/tmp/swiftcast_\(label).png"))
+        }
+    }
+
+    private func captureWindow(_ window: NSWindow, to url: URL) {
+        let number = window.windowNumber
+        NSLog("SwiftCast: capturing window num=\(number) title=\(window.title) visible=\(window.isVisible)")
+        guard number > 0, number < Int(UInt32.max) else { return }
+        let windowID = CGWindowID(UInt32(number))
+        if let cgImage = CGWindowListCreateImage(.infinite, .optionIncludingWindow, windowID, [.bestResolution]) {
+            let rep = NSBitmapImageRep(cgImage: cgImage)
+            if let png = rep.representation(using: .png, properties: [:]) {
+                try? png.write(to: url)
+                NSLog("SwiftCast: captured \(url.path)")
+            }
+        }
     }
 
     // MARK: NSWindowDelegate

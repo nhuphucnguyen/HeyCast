@@ -26,16 +26,21 @@ final class FileSearchService: NSObject, NSMetadataQueryDelegate {
         }
         targetQuery = q
         let mdQuery = NSMetadataQuery()
-        mdQuery.searchScopes = searchDirs.isEmpty
+        let scopes = searchDirs.isEmpty
             ? [NSMetadataQueryLocalComputerScope]
             : searchDirs.map { ($0 as NSString).expandingTildeInPath }
-        // Escape quotes/wildcards for the LIKE pattern
+        mdQuery.searchScopes = scopes
+        NSLog("SwiftCast: mdquery scopes: \(scopes)")
+        // Escape quotes/wildcards for the LIKE pattern, then pass the whole
+        // pattern as the predicate argument (embedding %@ inside quotes
+        // breaks the pattern match).
         let escaped = q
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "*", with: "\\*")
             .replacingOccurrences(of: "?", with: "\\?")
         mdQuery.predicate = NSPredicate(
-            format: "kMDItemDisplayName LIKE[c] '*%@*'", escaped
+            format: "kMDItemDisplayName LIKE[c] %@",
+            "*\(escaped)*"
         )
         mdQuery.delegate = self
         query = mdQuery
@@ -83,6 +88,7 @@ final class FileSearchService: NSObject, NSMetadataQueryDelegate {
         }
         query.enableUpdates()
         results = hits
+        NSLog("SwiftCast: file search collected \(hits.count) hits")
         onUpdate?()
     }
 

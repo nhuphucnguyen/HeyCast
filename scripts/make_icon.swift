@@ -9,7 +9,7 @@ let outDir = CommandLine.arguments.count > 1
 
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
-let size = 1024
+let size: CGFloat = 1024
 let image = NSImage(size: NSSize(width: size, height: size))
 image.lockFocus()
 
