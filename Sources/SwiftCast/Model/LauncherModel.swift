@@ -17,6 +17,7 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var theme: Theme
     @Published private(set) var clipboardItems: [ClipboardEntry] = []
     @Published private(set) var emojiResults: [EmojiEntry] = []
+    @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
     @Published private(set) var showFavoriteHint = false
 
@@ -143,7 +144,7 @@ final class LauncherModel: ObservableObject {
         switch page {
         case .emoji: return emojiResults.count
         case .clipboard: return filteredClipboardItems.count
-        case .files: return fileSearchService.results.count
+        case .files: return fileResults.count
         case .main: return results.count
         }
     }
@@ -216,6 +217,7 @@ final class LauncherModel: ObservableObject {
     }
 
     private func runFileSearch(_ text: String) {
+        fileResults = []
         fileSearchService.search(text, searchDirs: config.searchDirs)
         selectedIndex = 0
         onLayoutChanged?()
@@ -228,9 +230,10 @@ final class LauncherModel: ObservableObject {
     }
 
     private func fileSearchUpdated() {
+        fileResults = fileSearchService.results
         guard page == .files else { return }
-        if !fileSearchService.results.indices.contains(selectedIndex) {
-            selectedIndex = max(0, fileSearchService.results.count - 1)
+        if !fileResults.indices.contains(selectedIndex) {
+            selectedIndex = max(0, fileResults.count - 1)
         }
         onLayoutChanged?()
     }
@@ -704,7 +707,7 @@ final class LauncherModel: ObservableObject {
     var desiredWindowSize: NSSize {
         switch page {
         case .main, .files:
-            let rowCount = min(page == .main ? results.count : fileSearchService.results.count, Self.maxVisibleRows)
+            let rowCount = min(page == .main ? results.count : fileResults.count, Self.maxVisibleRows)
             let height = Self.chromePadding + Self.searchHeaderHeight
                 + CGFloat(rowCount) * Self.rowHeight
                 + (rowCount > 0 ? Self.footerHeight : 0)
@@ -730,7 +733,7 @@ final class LauncherModel: ObservableObject {
             let count = results.count
             return count == 1 ? "1 result found" : count == 0 ? "No results found" : "\(count) results found"
         case .files:
-            let count = fileSearchService.results.count
+            let count = fileResults.count
             return count == 1 ? "1 result found" : "\(count) results found"
         case .clipboard: return "Clipboard history"
         case .emoji: return "Emoji search"

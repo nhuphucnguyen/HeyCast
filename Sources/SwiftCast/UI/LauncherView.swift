@@ -110,7 +110,7 @@ struct LauncherView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(Array(model.fileSearchService.results.enumerated()), id: \.offset) { index, hit in
+                    ForEach(Array(model.fileResults.enumerated()), id: \.offset) { index, hit in
                         FileRow(model: model, hit: hit, isSelected: index == model.selectedIndex)
                             .id(hit.path)
                             .onTapGesture {
@@ -122,9 +122,9 @@ struct LauncherView: View {
                 .padding(.horizontal, 10)
             }
             .onChange(of: model.selectedIndex) { _ in
-                guard model.fileSearchService.results.indices.contains(model.selectedIndex) else { return }
+                guard model.fileResults.indices.contains(model.selectedIndex) else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(model.fileSearchService.results[model.selectedIndex].path, anchor: .center)
+                    proxy.scrollTo(model.fileResults[model.selectedIndex].path, anchor: .center)
                 }
             }
         }
@@ -181,7 +181,7 @@ struct ResultRow: View {
             favoriteButton
         }
         .padding(.horizontal, 10)
-        .frame(height: LauncherModel.rowHeight - 8)
+        .frame(height: LauncherModel.rowHeight - 2)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? model.theme.focusedRow : model.theme.unfocusedRow.alpha(0.001))
@@ -259,7 +259,7 @@ struct FileRow: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 10)
-        .frame(height: LauncherModel.rowHeight - 8)
+        .frame(height: LauncherModel.rowHeight - 2)
         .background(
             RoundedRectangle(cornerRadius: 8)
                 .fill(isSelected ? model.theme.focusedRow : model.theme.unfocusedRow.alpha(0.001))

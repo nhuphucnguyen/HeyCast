@@ -40,7 +40,7 @@ final class EmojiIndex {
         guard !query.isEmpty else { return Array(entries.prefix(limit)) }
         var scored: [(EmojiEntry, Int)] = []
         for entry in entries {
-            if let s = FuzzyMatch.score(query, entry.name) {
+            if let s = FuzzyMatch.score(query, entry.name), s >= 22 {
                 scored.append((entry, s))
             }
         }

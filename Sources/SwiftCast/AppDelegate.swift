@@ -11,15 +11,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController = StatusItemController()
     private var settingsController = SettingsWindowController()
     private var clipboardService: ClipboardService!
+    private var pendingURLs: [URL] = []
 
     override init() {
         super.init()
         Self.shared = self
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    /// Setup runs here (before Apple events like swiftcast:// URLs arrive).
+    func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        NSApp.applicationIconImage = NSApp.applicationIconImage // keep default until custom icon loads
 
         model = LauncherModel()
         panelController = PanelController(model: model)
@@ -30,11 +31,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.model.handleClipboardCapture(capture)
         }
         clipboardService.start()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = buildMainMenu()
+        for url in pendingURLs {
+            handleURLScheme(url)
+        }
+        pendingURLs.removeAll()
 
         if model.config.showOnStartup {
             model.show()
         }
-
         NSLog("SwiftCast started (v%@)", LauncherModel.appVersion)
     }
 
@@ -47,6 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: URL scheme (swiftcast://show | toggle | quit | open?target=NAME)
 
     func application(_ application: NSApplication, open urls: [URL]) {
+        NSLog("SwiftCast: open URLs called: \(urls)")
+        guard model != nil else {
+            pendingURLs.append(contentsOf: urls)
+            return
+        }
         for url in urls where url.scheme?.lowercased() == "swiftcast" {
             handleURLScheme(url)
         }
@@ -54,11 +67,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleURLScheme(_ url: URL) {
         let host = url.host?.lowercased() ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        NSLog("SwiftCast: URL scheme action '\(host)'")
         switch host {
         case "show":
             if !model.panelIsVisible { model.show() }
         case "toggle":
             model.toggle()
+        case "screenshot":
+            // Debug aid: capture the launcher panel to /tmp/swiftcast_panel.png
+            panelController.capturePanel(to: URL(fileURLWithPath: "/tmp/swiftcast_panel.png"))
+        case "capture":
+            panelController.captureAllWindows()
+        case "query":
+            let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            if let text = params.first(where: { $0.name == "text" })?.value {
+                if !model.panelIsVisible { model.show() }
+                model.query = text.removingPercentEncoding ?? text
+            }
+        case "down":
+            model.moveSelection(1)
+        case "up":
+            model.moveSelection(-1)
+        case "esc":
+            model.escPressed()
+        case "page":
+            let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            if let name = params.first(where: { $0.name == "name" })?.value,
+               let page = Page(rawValue: name) {
+                model.show(to: page)
+            }
+        case "settings":
+            showSettings()
         case "quit":
             model.saveRankingNow()
             exit(0)
