@@ -593,8 +593,8 @@ final class LauncherModel: ObservableObject {
     }
 
     func clearClipboard() {
-        clipboardStore.deleteAll()
-        clipboardItems.removeAll()
+        clipboardStore.deleteAll()  // pinned entries survive (Maccy behavior)
+        clipboardItems.removeAll { !$0.isPinned }
     }
 
     func toggleFavorite(_ item: ResultItem) {
@@ -629,7 +629,8 @@ final class LauncherModel: ObservableObject {
         if let existing = clipboardStore.touchExisting(kind: content.kind, text: content.text,
                                                        imageData: content.imageData) {
             clipboardItems.removeAll { $0.id == existing.id }
-            clipboardItems.insert(existing, at: 0)
+            clipboardItems.append(existing)
+            resortClipboardItems()
             return
         }
         // Entries need a unique, stable ID for SwiftUI identity: use the
@@ -641,11 +642,32 @@ final class LauncherModel: ObservableObject {
         let entry = ClipboardEntry(id: id, kind: content.kind, text: content.text,
                                    imageData: content.imageData, createdAt: Date(),
                                    sourceBundleID: source?.bundleID, sourceName: source?.name)
-        clipboardItems.insert(entry, at: 0)
+        clipboardItems.append(entry)
+        resortClipboardItems()
         if clipboardItems.count > config.clipboardHistorySize {
             clipboardItems.removeLast(clipboardItems.count - config.clipboardHistorySize)
         }
         clipboardStore.prune(keep: config.clipboardHistorySize)
+    }
+
+    /// Canonical clipboard order: pinned entries first (Maccy), then by copy
+    /// recency. id desc breaks ties so same-millisecond entries stay stable.
+    private func resortClipboardItems() {
+        clipboardItems.sort {
+            if $0.isPinned != $1.isPinned { return $0.isPinned }
+            if $0.createdAt != $1.createdAt { return $0.createdAt > $1.createdAt }
+            return $0.id > $1.id
+        }
+    }
+
+    /// Maccy's ⌘P: pinning keeps an entry at the top and exempts it from
+    /// Clear History and history-size pruning.
+    func toggleClipboardPin(_ entry: ClipboardEntry) {
+        let newValue = !entry.isPinned
+        clipboardStore.setPinned(id: entry.id, isPinned: newValue)
+        guard let index = clipboardItems.firstIndex(where: { $0.id == entry.id }) else { return }
+        clipboardItems[index].isPinned = newValue
+        resortClipboardItems()
     }
 
     private func nextFallbackClipboardID() -> Int64 {
