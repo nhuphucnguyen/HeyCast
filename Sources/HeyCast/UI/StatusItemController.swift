@@ -67,7 +67,7 @@ final class StatusItemController {
         about.target = self
         menu.addItem(about)
 
-        let github = NSMenuItem(title: "Star RustCast on GitHub", action: #selector(openGitHub), keyEquivalent: "")
+        let github = NSMenuItem(title: "HeyCast on GitHub", action: #selector(openGitHub), keyEquivalent: "")
         github.target = self
         menu.addItem(github)
 
@@ -95,7 +95,7 @@ final class StatusItemController {
         ])
     }
     @objc private func openGitHub() {
-        NSWorkspace.shared.open(URL(string: "https://github.com/MystikoLab/rustcast")!)
+        NSWorkspace.shared.open(URL(string: "https://github.com/nhuphucnguyen/HeyCast")!)
     }
     @objc private func quit() {
         model?.saveRankingNow()
