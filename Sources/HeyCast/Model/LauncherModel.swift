@@ -482,7 +482,7 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("folder"), searchName: "file search", action: .switchPage(.files)),
             ResultItem(id: "builtin-reload", title: "Reload HeyCast", subtitle: "Reloads config & apps",
                        icon: .symbol("arrow.clockwise"), searchName: "reload", action: .reload),
-            ResultItem(id: "builtin-version", title: "HeyCast v\(Self.appVersion)", subtitle: "Native Swift port of RustCast",
+            ResultItem(id: "builtin-version", title: "HeyCast v\(Self.appVersion)", subtitle: "Ready when you are.",
                        icon: .symbol("bolt.fill"), action: .display),
             ResultItem(id: "builtin-ferris", title: "Ferris Plushies", subtitle: "Easter egg",
                        icon: .symbol("crown"), action: .openURL(URL(string: "https://ferris.rs")!)),
