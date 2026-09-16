@@ -26,6 +26,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panelController = PanelController(model: model)
         statusItemController.install(model: model)
 
+        NotificationService.shared.setup()
+        NotificationService.shared.onOpenMessage = { [weak self] id in
+            guard let self else { return }
+            if let message = self.model.assistantMessages.first(where: { $0.id == id }) {
+                self.model.openAssistantMessage(message)
+            }
+            self.model.show(to: .assistant)
+        }
+        model.onAssistantUnread = { [weak self] unread in
+            self?.statusItemController.updateBadge(unread: unread)
+        }
+        statusItemController.updateBadge(unread: model.assistantUnread)
+
         clipboardService = ClipboardService()
         clipboardService.onCapture = { [weak self] capture in
             self?.model.handleClipboardCapture(capture)
@@ -97,6 +110,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "enter":
             // Same as pressing return on the highlighted row.
             model.openFocused()
+        case "ask":
+            // Fire-and-forget: heycast://ask?text=...&agent=alias
+            let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let text = params.first(where: { $0.name == "text" })?.value?.removingPercentEncoding
+            let agentAlias = params.first(where: { $0.name == "agent" })?.value?.removingPercentEncoding
+            guard let text, !text.isEmpty else { break }
+            if let agentAlias {
+                model.sendToAgent(alias: agentAlias, text: text)
+            } else {
+                model.sendToDefaultAgent(text)
+            }
         case "esc":
             model.escPressed()
         case "page":
@@ -162,3 +186,4 @@ func buildMainMenu() -> NSMenu {
 
     return menu
 }
+

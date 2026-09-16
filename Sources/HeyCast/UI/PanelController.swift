@@ -171,7 +171,12 @@ final class PanelController: NSObject, NSWindowDelegate {
             if page == .emoji { model.moveSelection(1); return nil }
             return event
         case 36, 76: // return / enter
-            model.openFocused()
+            if cmd, page == .main {
+                // ⌘↵ sends the query to the default agent (fire-and-forget).
+                model.sendToDefaultAgent(model.query)
+            } else {
+                model.openFocused()
+            }
             return nil
         case 53: // escape
             model.escPressed()
@@ -228,6 +233,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             model.openFocused()
         case .files:
             guard model.fileSearchService.results.indices.contains(index) else { return }
+            model.selectedIndex = index
+            model.openFocused()
+        case .assistant:
+            guard model.assistantMessages.indices.contains(index) else { return }
             model.selectedIndex = index
             model.openFocused()
         }

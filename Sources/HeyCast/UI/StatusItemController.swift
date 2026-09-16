@@ -28,6 +28,12 @@ final class StatusItemController {
         }
     }
 
+    /// Unread assistant responses show as a small dot next to the bolt —
+    /// no extra menu bar icon.
+    func updateBadge(unread: Int) {
+        statusItem?.button?.title = unread > 0 ? " •" : ""
+    }
+
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
         let version = NSMenuItem(title: "HeyCast v\(LauncherModel.appVersion)", action: nil, keyEquivalent: "")
