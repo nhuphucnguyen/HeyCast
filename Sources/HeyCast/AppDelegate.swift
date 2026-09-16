@@ -133,7 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let tabName = params.first(where: { $0.name == "tab" })?.value?.lowercased()
             let tab = SettingsTab(rawValue: tabName ?? "") ?? .general
-            settingsController.show(model: model, tab: tab)
+            let add = params.first(where: { $0.name == "add" })?.value == "1"
+            settingsController.show(model: model, tab: tab, addAgent: add)
         case "quit":
             model.saveRankingNow()
             exit(0)

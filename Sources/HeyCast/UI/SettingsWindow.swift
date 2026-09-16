@@ -15,7 +15,7 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private weak var model: LauncherModel?
 
-    func show(model: LauncherModel, tab: SettingsTab = .general) {
+    func show(model: LauncherModel, tab: SettingsTab = .general, addAgent: Bool = false) {
         self.model = model
         if window == nil {
             NSLog("HeyCast: creating settings window")
@@ -34,7 +34,8 @@ final class SettingsWindowController {
         }
         // Rebuild the view on every open so the draft reflects changes made
         // elsewhere (tray menu, edited config.json + Refresh) while closed.
-        window?.contentView = NSHostingView(rootView: SettingsView(model: model, initialTab: tab))
+        window?.contentView = NSHostingView(rootView: SettingsView(model: model, initialTab: tab,
+                                                                  initialAdd: addAgent))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
@@ -54,10 +55,13 @@ struct SettingsView: View {
     @State private var newModeName = ""
     @State private var newModeCommand = ""
 
-    init(model: LauncherModel, initialTab: SettingsTab = .general) {
+    @State private var showingAddAgent = false
+
+    init(model: LauncherModel, initialTab: SettingsTab = .general, initialAdd: Bool = false) {
         self.model = model
         _draft = State(initialValue: model.config)
         _tab = State(initialValue: initialTab)
+        _showingAddAgent = State(initialValue: initialAdd)
     }
 
     var body: some View {
@@ -143,26 +147,11 @@ struct SettingsView: View {
 
     // MARK: assistant
 
-    @State private var newAgentName = ""
-    @State private var newAgentAlias = ""
-    @State private var newAgentType = "openai"
-    @State private var newAgentURL = ""
-    @State private var newAgentModel = ""
-    @State private var newAgentKey = ""
-
-    private var newAgentIsValid: Bool {
-        let name = newAgentName.trimmingCharacters(in: .whitespaces)
-        let alias = newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased()
-        let url = newAgentURL.trimmingCharacters(in: .whitespaces)
-        guard !name.isEmpty, !alias.isEmpty, !url.isEmpty else { return false }
-        return !draft.agents.contains { $0.alias == alias }
-    }
-
     private var assistantTab: some View {
         Form {
             Section("Agents") {
                 if draft.agents.isEmpty {
-                    Text("No agents yet — add one below.")
+                    Text("No agents yet.")
                         .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
                 ForEach(draft.agents.indices, id: \.self) { index in
@@ -195,56 +184,10 @@ struct SettingsView: View {
                         }
                     }
                 }
-            }
-            Section("Add an Agent") {
-                TextField("Name — e.g. Hermes", text: $newAgentName)
-                TextField("Alias — used as @alias in the search bar", text: $newAgentAlias)
-                LabeledContent("Type") {
-                    Picker("", selection: $newAgentType) {
-                        Text("OpenAI-compatible").tag("openai")
-                        Text("Anthropic").tag("anthropic")
-                        Text("MCP server").tag("mcp")
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 320)
-                }
-                TextField(newAgentType == "mcp"
-                          ? "Endpoint URL — e.g. https://hermes.example.com/mcp"
-                          : "Base URL — e.g. https://api.openai.com/v1",
-                          text: $newAgentURL)
-                TextField(newAgentType == "mcp"
-                          ? "Tool to call — optional, else the first listed"
-                          : "Model — e.g. glm-5.3, gpt-4o-mini, claude-sonnet-4-5",
-                          text: $newAgentModel)
-                SecureField("API Key (Bearer) — stored in config.json", text: $newAgentKey)
-                HStack {
-                    if !newAgentName.isEmpty, !newAgentIsValid {
-                        Text(newAgentAlias.isEmpty ? "Name, alias and URL are required"
-                             : (draft.agents.contains { $0.alias == newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased() }
-                                ? "That alias is already used" : "Name, alias and URL are required"))
-                            .font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("Add Agent") {
-                        let name = newAgentName.trimmingCharacters(in: .whitespaces)
-                        let alias = newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased()
-                        let url = newAgentURL.trimmingCharacters(in: .whitespaces)
-                        guard newAgentIsValid else { return }
-                        let type = newAgentType
-                        var base = url
-                        if type == "anthropic", base.isEmpty { base = "https://api.anthropic.com" }
-                        draft.agents.append(AgentConfig(
-                            name: name, alias: alias, type: type, baseURL: base,
-                            model: (type == "mcp" || newAgentModel.isEmpty) ? nil : newAgentModel,
-                            tool: (type == "mcp" && !newAgentModel.isEmpty) ? newAgentModel : nil,
-                            apiKey: newAgentKey.isEmpty ? nil : newAgentKey))
-                        if draft.defaultAgent == nil { draft.defaultAgent = alias }
-                        newAgentName = ""; newAgentAlias = ""; newAgentURL = ""
-                        newAgentModel = ""; newAgentKey = ""
-                        persist()
-                    }
-                    .disabled(!newAgentIsValid)
+                Button {
+                    showingAddAgent = true
+                } label: {
+                    Label("Add Agent…", systemImage: "plus")
                 }
             }
             Section {
@@ -255,7 +198,130 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .sheet(isPresented: $showingAddAgent) {
+            AddAgentSheet(takenAliases: Set(draft.agents.map(\.alias))) { agent in
+                draft.agents.append(agent)
+                if draft.defaultAgent == nil { draft.defaultAgent = agent.alias }
+                persist()
+            }
+        }
     }
+
+    /// Focused add-agent dialog: label above each bordered field so it's obvious
+    /// what goes where. Enter adds, Escape cancels.
+    struct AddAgentSheet: View {
+    var takenAliases: Set<String>
+    var onAdd: (AgentConfig) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var alias = ""
+    @State private var type = "openai"
+    @State private var baseURL = ""
+    @State private var modelOrTool = ""
+    @State private var apiKey = ""
+    @FocusState private var nameFocused: Bool
+
+    private var aliasClean: String {
+        alias.trimmingCharacters(in: .whitespaces).lowercased()
+    }
+    private var isValid: Bool {
+        !name.trimmingCharacters(in: .whitespaces).isEmpty
+            && !aliasClean.isEmpty
+            && !baseURL.trimmingCharacters(in: .whitespaces).isEmpty
+            && !takenAliases.contains(aliasClean)
+    }
+    private var problem: String? {
+        if name.trimmingCharacters(in: .whitespaces).isEmpty && aliasClean.isEmpty { return nil }
+        if takenAliases.contains(aliasClean) { return "That alias is already used" }
+        if name.trimmingCharacters(in: .whitespaces).isEmpty { return "Name is required" }
+        if aliasClean.isEmpty { return "Alias is required" }
+        if baseURL.trimmingCharacters(in: .whitespaces).isEmpty { return "URL is required" }
+        return nil
+    }
+
+    private func field<Content: View>(_ label: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label).font(.system(size: 11, weight: .medium)).foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add Agent").font(.headline)
+
+            field("Name") {
+                TextField("e.g. Hermes", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($nameFocused)
+            }
+            field("Alias — you'll type @alias in the search bar") {
+                HStack(spacing: 4) {
+                    Text("@").foregroundStyle(.secondary)
+                    TextField("hermes", text: $alias)
+                        .textFieldStyle(.roundedBorder)
+                        .disableAutocorrection(true)
+                }
+            }
+            field("Type") {
+                Picker("", selection: $type) {
+                    Text("OpenAI-compatible").tag("openai")
+                    Text("Anthropic").tag("anthropic")
+                    Text("MCP server").tag("mcp")
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            field(type == "mcp" ? "Endpoint URL" : "Base URL") {
+                TextField(type == "mcp"
+                          ? "https://hermes.example.com/mcp"
+                          : (type == "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"),
+                          text: $baseURL)
+                    .textFieldStyle(.roundedBorder)
+            }
+            field(type == "mcp" ? "Tool to call — optional" : "Model") {
+                TextField(type == "mcp"
+                          ? "leave empty to use the first listed tool"
+                          : (type == "anthropic" ? "claude-sonnet-4-5" : "glm-5.3, gpt-4o-mini, …"),
+                          text: $modelOrTool)
+                    .textFieldStyle(.roundedBorder)
+            }
+            field("API Key") {
+                SecureField("Bearer token", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            HStack {
+                if let problem {
+                    Text(problem).font(.system(size: 11)).foregroundStyle(.red)
+                }
+                Spacer()
+                Button("Cancel", role: .cancel) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                Button("Add") {
+                    var base = baseURL.trimmingCharacters(in: .whitespaces)
+                    if type == "anthropic", base.isEmpty { base = "https://api.anthropic.com" }
+                    onAdd(AgentConfig(
+                        name: name.trimmingCharacters(in: .whitespaces),
+                        alias: aliasClean,
+                        type: type,
+                        baseURL: base,
+                        model: (type == "mcp" || modelOrTool.isEmpty) ? nil : modelOrTool,
+                        tool: (type == "mcp" && !modelOrTool.isEmpty) ? modelOrTool : nil,
+                        apiKey: apiKey.isEmpty ? nil : apiKey))
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!isValid)
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+        .onAppear { nameFocused = true }
+    }
+}
 
     // MARK: appearance
 
