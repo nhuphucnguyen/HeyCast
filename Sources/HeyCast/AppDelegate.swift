@@ -130,7 +130,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.show(to: page)
             }
         case "settings":
-            showSettings()
+            let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            let tabName = params.first(where: { $0.name == "tab" })?.value?.lowercased()
+            let tab = SettingsTab(rawValue: tabName ?? "") ?? .general
+            settingsController.show(model: model, tab: tab)
         case "quit":
             model.saveRankingNow()
             exit(0)

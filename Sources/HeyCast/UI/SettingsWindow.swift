@@ -1,8 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// Settings window with General / Appearance / Commands tabs. Edits a draft
-/// config and pushes it into the model (which persists + applies hotkeys).
+enum SettingsTab: String, CaseIterable {
+    case general, clipboard, assistant, appearance, commands
+}
+
+/// Settings window with General / Clipboard / Assistant / Appearance /
+/// Commands tabs. Edits a draft config and pushes it into the model (which
+/// persists + applies hotkeys).
 @MainActor
 final class SettingsWindowController {
     static let windowIdentifier = "HeyCastSettings"
@@ -10,12 +15,12 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private weak var model: LauncherModel?
 
-    func show(model: LauncherModel) {
+    func show(model: LauncherModel, tab: SettingsTab = .general) {
         self.model = model
         if window == nil {
             NSLog("HeyCast: creating settings window")
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
+                contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
                 styleMask: [.titled, .closable],
                 backing: .buffered,
                 defer: false
@@ -29,7 +34,7 @@ final class SettingsWindowController {
         }
         // Rebuild the view on every open so the draft reflects changes made
         // elsewhere (tray menu, edited config.json + Refresh) while closed.
-        window?.contentView = NSHostingView(rootView: SettingsView(model: model))
+        window?.contentView = NSHostingView(rootView: SettingsView(model: model, initialTab: tab))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
@@ -43,26 +48,28 @@ final class SettingsWindowController {
 struct SettingsView: View {
     @ObservedObject var model: LauncherModel
     @State private var draft: Config
+    @State private var tab: SettingsTab
     @State private var newShellCommand = ""
     @State private var newShellAlias = ""
     @State private var newModeName = ""
     @State private var newModeCommand = ""
 
-    init(model: LauncherModel) {
+    init(model: LauncherModel, initialTab: SettingsTab = .general) {
         self.model = model
         _draft = State(initialValue: model.config)
+        _tab = State(initialValue: initialTab)
     }
 
     var body: some View {
-        TabView {
-            generalTab.tabItem { Label("General", systemImage: "switch.2") }
-            clipboardTab.tabItem { Label("Clipboard", systemImage: "clipboard") }
-            assistantTab.tabItem { Label("Assistant", systemImage: "sparkles") }
-            appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }
-            commandsTab.tabItem { Label("Commands", systemImage: "terminal") }
+        TabView(selection: $tab) {
+            generalTab.tabItem { Label("General", systemImage: "switch.2") }.tag(SettingsTab.general)
+            clipboardTab.tabItem { Label("Clipboard", systemImage: "clipboard") }.tag(SettingsTab.clipboard)
+            assistantTab.tabItem { Label("Assistant", systemImage: "sparkles") }.tag(SettingsTab.assistant)
+            appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }.tag(SettingsTab.appearance)
+            commandsTab.tabItem { Label("Commands", systemImage: "terminal") }.tag(SettingsTab.commands)
         }
         .padding(20)
-        .frame(width: 620, height: 520)
+        .frame(width: 640, height: 560)
         .onDisappear { persist() }
     }
 
@@ -143,73 +150,105 @@ struct SettingsView: View {
     @State private var newAgentModel = ""
     @State private var newAgentKey = ""
 
+    private var newAgentIsValid: Bool {
+        let name = newAgentName.trimmingCharacters(in: .whitespaces)
+        let alias = newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased()
+        let url = newAgentURL.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, !alias.isEmpty, !url.isEmpty else { return false }
+        return !draft.agents.contains { $0.alias == alias }
+    }
+
     private var assistantTab: some View {
         Form {
             Section("Agents") {
-                ForEach(draft.agents.indices, id: \.self) { index in
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("\(draft.agents[index].name)  (@\(draft.agents[index].alias))")
-                                .font(.system(size: 13, weight: .medium))
-                            Text("\(draft.agents[index].type) · \(draft.agents[index].baseURL)")
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Spacer()
-                        Picker("", selection: Binding(
-                            get: { draft.defaultAgent },
-                            set: { draft.defaultAgent = ($0 == draft.defaultAgent) ? nil : $0 }
-                        )) {
-                            Text("—").tag(String?.none)
-                            Text("Default").tag(Optional(draft.agents[index].alias))
-                        }
-                        .labelsHidden()
-                        .frame(width: 90)
-                        Button("Remove") {
-                            if draft.defaultAgent == draft.agents[index].alias { draft.defaultAgent = nil }
-                            draft.agents.remove(at: index)
-                            persist()
-                        }
-                        .buttonStyle(.borderless)
-                    }
+                if draft.agents.isEmpty {
+                    Text("No agents yet — add one below.")
+                        .font(.system(size: 12)).foregroundStyle(.secondary)
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        TextField("name", text: $newAgentName).frame(width: 90)
-                        TextField("alias", text: $newAgentAlias).frame(width: 70)
-                        Picker("", selection: $newAgentType) {
-                            ForEach(["openai", "anthropic", "mcp"], id: \.self) { Text($0) }
+                ForEach(draft.agents.indices, id: \.self) { index in
+                    LabeledContent {
+                        HStack(spacing: 8) {
+                            Button {
+                                draft.defaultAgent = (draft.defaultAgent == draft.agents[index].alias)
+                                    ? nil : draft.agents[index].alias
+                                persist()
+                            } label: {
+                                Label(draft.defaultAgent == draft.agents[index].alias ? "Default" : "Set Default",
+                                      systemImage: draft.defaultAgent == draft.agents[index].alias ? "star.fill" : "star")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("The default agent answers ⌘↵ and the Assistant page")
+                            Button("Remove", role: .destructive) {
+                                if draft.defaultAgent == draft.agents[index].alias { draft.defaultAgent = nil }
+                                draft.agents.remove(at: index)
+                                persist()
+                            }
+                            .buttonStyle(.borderless)
                         }
-                        .labelsHidden().frame(width: 100)
-                    }
-                    TextField("Base URL (openai incl. /v1 · mcp endpoint URL)", text: $newAgentURL)
-                    HStack {
-                        TextField("model (chat) / tool (mcp, optional)", text: $newAgentModel)
-                        TextField("API key (Bearer)", text: $newAgentKey)
-                    }
-                    HStack {
-                        Spacer()
-                        Button("Add Agent") {
-                            let name = newAgentName.trimmingCharacters(in: .whitespaces)
-                            let alias = newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased()
-                            let url = newAgentURL.trimmingCharacters(in: .whitespaces)
-                            guard !name.isEmpty, !alias.isEmpty, !url.isEmpty else { return }
-                            let type = newAgentType
-                            draft.agents.append(AgentConfig(
-                                name: name, alias: alias, type: type, baseURL: url,
-                                model: newAgentModel.isEmpty ? nil : newAgentModel,
-                                tool: (type == "mcp" && !newAgentModel.isEmpty) ? newAgentModel : nil,
-                                apiKey: newAgentKey.isEmpty ? nil : newAgentKey))
-                            if draft.defaultAgent == nil { draft.defaultAgent = alias }
-                            newAgentName = ""; newAgentAlias = ""; newAgentURL = ""
-                            newAgentModel = ""; newAgentKey = ""
-                            persist()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(draft.agents[index].name)  ·  @\(draft.agents[index].alias)")
+                                .font(.system(size: 13, weight: .medium))
+                            Text("\(draft.agents[index].type) — \(draft.agents[index].baseURL)")
+                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.middle)
                         }
                     }
                 }
             }
-            Section("How to ask") {
-                Text("From the main bar: \"@alias your question\" + Enter, or ⌘↵ to ask the default agent. On the Assistant page, type and press Enter. The panel hides immediately; the response arrives as a notification and in the Assistant inbox.")
+            Section("Add an Agent") {
+                TextField("Name — e.g. Hermes", text: $newAgentName)
+                TextField("Alias — used as @alias in the search bar", text: $newAgentAlias)
+                LabeledContent("Type") {
+                    Picker("", selection: $newAgentType) {
+                        Text("OpenAI-compatible").tag("openai")
+                        Text("Anthropic").tag("anthropic")
+                        Text("MCP server").tag("mcp")
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 320)
+                }
+                TextField(newAgentType == "mcp"
+                          ? "Endpoint URL — e.g. https://hermes.example.com/mcp"
+                          : "Base URL — e.g. https://api.openai.com/v1",
+                          text: $newAgentURL)
+                TextField(newAgentType == "mcp"
+                          ? "Tool to call — optional, else the first listed"
+                          : "Model — e.g. glm-5.3, gpt-4o-mini, claude-sonnet-4-5",
+                          text: $newAgentModel)
+                SecureField("API Key (Bearer) — stored in config.json", text: $newAgentKey)
+                HStack {
+                    if !newAgentName.isEmpty, !newAgentIsValid {
+                        Text(newAgentAlias.isEmpty ? "Name, alias and URL are required"
+                             : (draft.agents.contains { $0.alias == newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased() }
+                                ? "That alias is already used" : "Name, alias and URL are required"))
+                            .font(.system(size: 11)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Add Agent") {
+                        let name = newAgentName.trimmingCharacters(in: .whitespaces)
+                        let alias = newAgentAlias.trimmingCharacters(in: .whitespaces).lowercased()
+                        let url = newAgentURL.trimmingCharacters(in: .whitespaces)
+                        guard newAgentIsValid else { return }
+                        let type = newAgentType
+                        var base = url
+                        if type == "anthropic", base.isEmpty { base = "https://api.anthropic.com" }
+                        draft.agents.append(AgentConfig(
+                            name: name, alias: alias, type: type, baseURL: base,
+                            model: (type == "mcp" || newAgentModel.isEmpty) ? nil : newAgentModel,
+                            tool: (type == "mcp" && !newAgentModel.isEmpty) ? newAgentModel : nil,
+                            apiKey: newAgentKey.isEmpty ? nil : newAgentKey))
+                        if draft.defaultAgent == nil { draft.defaultAgent = alias }
+                        newAgentName = ""; newAgentAlias = ""; newAgentURL = ""
+                        newAgentModel = ""; newAgentKey = ""
+                        persist()
+                    }
+                    .disabled(!newAgentIsValid)
+                }
+            }
+            Section {
+                Text("Ask from anywhere: \"@alias your question\" + Enter, or ⌘↵ for the default agent. On the Assistant page, type and press Enter. The panel hides immediately; the answer arrives as a notification and waits in the Assistant inbox.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Text("API keys are stored in config.json (~/Library/Application Support/HeyCast). Keep the file private; Keychain storage is planned.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
