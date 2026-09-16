@@ -31,7 +31,8 @@ pure Apple frameworks so every feature leans on the platform directly.
   (exempt from Clear History and the size cap), copies from password managers /
   transient sources are ignored (nspasteboard.org concealed & transient
   markers), each entry records the source app, and history is capped
-  (200 by default, configurable).
+  (200 by default, configurable). ⌘1…⌘9 copies one of the first nine
+  entries directly.
 - Emoji search — 6-wide grid, hover tooltips, Enter copies
 
 **Platform-native plumbing**
