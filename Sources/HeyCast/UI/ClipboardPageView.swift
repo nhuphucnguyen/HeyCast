@@ -92,6 +92,13 @@ struct ClipboardPageView: View {
                         .help("Open URL")
                     }
                     Button {
+                        model.toggleClipboardPin(selected)
+                    } label: {
+                        Image(systemName: selected.isPinned ? "pin.slash" : "pin")
+                    }
+                    .buttonStyle(.plain)
+                    .help(selected.isPinned ? "Unpin entry (⌘P)" : "Pin entry to top (⌘P)")
+                    Button {
                         model.deleteClipboardEntry(selected)
                     } label: {
                         Image(systemName: "trash")
@@ -104,6 +111,7 @@ struct ClipboardPageView: View {
                     }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
+                    .help("Clear history (pinned entries are kept)")
                 }
                 Text(metaLine(for: selected))
                     .font(.system(size: 11))
@@ -147,6 +155,11 @@ private struct ClipboardRow: View {
                 Text("×\(entry.copies)")
                     .font(.system(size: 11))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
+            }
+            if entry.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(model.theme.textColor.alpha(0.55))
             }
         }
         .padding(.horizontal, 8)

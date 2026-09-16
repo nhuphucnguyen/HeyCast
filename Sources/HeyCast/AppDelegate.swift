@@ -88,6 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.moveSelection(1)
         case "up":
             model.moveSelection(-1)
+        case "pin":
+            // Same toggle as ⌘P on the clipboard page; also handy for scripts.
+            if model.page == .clipboard,
+               model.filteredClipboardItems.indices.contains(model.selectedIndex) {
+                model.toggleClipboardPin(model.filteredClipboardItems[model.selectedIndex])
+            }
         case "esc":
             model.escPressed()
         case "page":

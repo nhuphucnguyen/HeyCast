@@ -13,6 +13,7 @@ struct ClipboardEntry: Identifiable, Equatable {
     var copies: Int = 1
     var sourceBundleID: String? = nil  // app that was frontmost at copy time
     var sourceName: String? = nil
+    var isPinned: Bool = false
 
     var preview: String {
         switch kind {
@@ -58,6 +59,7 @@ final class ClipboardStore {
         _ = execute("ALTER TABLE clipboard_entries ADD COLUMN copies INTEGER NOT NULL DEFAULT 1")
         _ = execute("ALTER TABLE clipboard_entries ADD COLUMN source_bundle TEXT")
         _ = execute("ALTER TABLE clipboard_entries ADD COLUMN source_name TEXT")
+        _ = execute("ALTER TABLE clipboard_entries ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0")
     }
 
     deinit {
@@ -169,13 +171,16 @@ final class ClipboardStore {
         return promoted
     }
 
-    /// Drops the oldest rows beyond `keep` (Maccy caps its history size the
-    /// same way); otherwise the database grows without bound.
+    /// Drops the oldest unpinned rows beyond `keep` (Maccy caps its history
+    /// size the same way); pinned entries are exempt from the cap.
     func prune(keep: Int = ClipboardStore.historyLimit) {
         queue.sync { [weak self] in
             guard let self, let db = self.db else { return }
             var stmt: OpaquePointer?
-            let sql = "DELETE FROM clipboard_entries WHERE id NOT IN (SELECT id FROM clipboard_entries ORDER BY created_at DESC LIMIT ?)"
+            let sql = """
+            DELETE FROM clipboard_entries WHERE is_pinned = 0 AND id NOT IN
+                (SELECT id FROM clipboard_entries WHERE is_pinned = 0 ORDER BY created_at DESC LIMIT ?)
+            """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
             sqlite3_bind_int64(stmt, 1, Int64(keep))
@@ -188,8 +193,8 @@ final class ClipboardStore {
             guard let self, let db = self.db else { return [] }
             var stmt: OpaquePointer?
             let sql = """
-            SELECT id, content_type, text_content, blob_content, created_at, copies, source_bundle, source_name
-            FROM clipboard_entries ORDER BY created_at DESC LIMIT ?
+            SELECT id, content_type, text_content, blob_content, created_at, copies, source_bundle, source_name, is_pinned
+            FROM clipboard_entries ORDER BY is_pinned DESC, created_at DESC LIMIT ?
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
             defer { sqlite3_finalize(stmt) }
@@ -210,13 +215,39 @@ final class ClipboardStore {
                 let copies = Int(sqlite3_column_int64(stmt, 5))
                 let sourceBundle = sqlite3_column_text(stmt, 6).map { String(cString: $0) }
                 let sourceName = sqlite3_column_text(stmt, 7).map { String(cString: $0) }
+                let isPinned = sqlite3_column_int64(stmt, 8) != 0
                 if kind != .image && (text ?? "").isEmpty { continue }
                 if kind == .image && imageData == nil { continue }
                 entries.append(ClipboardEntry(id: id, kind: kind, text: text, imageData: imageData,
                                               createdAt: created, copies: max(1, copies),
-                                              sourceBundleID: sourceBundle, sourceName: sourceName))
+                                              sourceBundleID: sourceBundle, sourceName: sourceName,
+                                              isPinned: isPinned))
             }
             return entries
+        }
+    }
+
+    /// Pins or unpins an entry (Maccy's ⌘P). Pinned entries stay at the top
+    /// of the list and are exempt from Clear and history-size pruning.
+    func setPinned(id: Int64, isPinned: Bool) {
+        queue.sync { [weak self] in
+            guard let self, let db = self.db else { return }
+            var stmt: OpaquePointer?
+            let sql = "UPDATE clipboard_entries SET is_pinned = ? WHERE id = ?"
+            guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+            sqlite3_bind_int64(stmt, 1, isPinned ? 1 : 0)
+            sqlite3_bind_int64(stmt, 2, id)
+            _ = sqlite3_step(stmt)
+        }
+    }
+
+    /// Deletes unpinned entries; pinned ones survive (Maccy's Clear behavior).
+    func deleteAll(keepingPinned: Bool = true) {
+        queue.sync { [weak self] in
+            guard let self, let db = self.db else { return }
+            let sql = keepingPinned ? "DELETE FROM clipboard_entries WHERE is_pinned = 0" : "DELETE FROM clipboard_entries"
+            _ = sqlite3_exec(db, sql, nil, nil, nil)
         }
     }
 
@@ -241,7 +272,7 @@ final class ClipboardStore {
     private static func entry(id: Int64, db: OpaquePointer) -> ClipboardEntry? {
         var stmt: OpaquePointer?
         let sql = """
-        SELECT content_type, text_content, blob_content, created_at, copies, source_bundle, source_name
+        SELECT content_type, text_content, blob_content, created_at, copies, source_bundle, source_name, is_pinned
         FROM clipboard_entries WHERE id = ?
         """
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return nil }
@@ -258,9 +289,10 @@ final class ClipboardStore {
         let copies = max(1, Int(sqlite3_column_int64(stmt, 4)))
         let sourceBundle = sqlite3_column_text(stmt, 5).map { String(cString: $0) }
         let sourceName = sqlite3_column_text(stmt, 6).map { String(cString: $0) }
+        let isPinned = sqlite3_column_int64(stmt, 7) != 0
         return ClipboardEntry(id: id, kind: ClipboardEntry.Kind(rawValue: kindRaw) ?? .text,
                               text: text, imageData: imageData, createdAt: created, copies: copies,
-                              sourceBundleID: sourceBundle, sourceName: sourceName)
+                              sourceBundleID: sourceBundle, sourceName: sourceName, isPinned: isPinned)
     }
 }
 

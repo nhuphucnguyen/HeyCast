@@ -27,9 +27,10 @@ pure Apple frameworks so every feature leans on the platform directly.
 - File search — live Spotlight results via `NSMetadataQuery`
 - Clipboard history (`cbhist`) — text/URL/image, SQLite-backed, preview pane,
   optional paste-on-select. Maccy-inspired: repeat copies promote the existing
-  entry to the top with a ×N count (no duplicates), copies from password
-  managers / transient sources are ignored (nspasteboard.org concealed &
-  transient markers), each entry records the source app, and history is capped
+  entry to the top with a ×N count (no duplicates), ⌘P pins entries to the top
+  (exempt from Clear History and the size cap), copies from password managers /
+  transient sources are ignored (nspasteboard.org concealed & transient
+  markers), each entry records the source app, and history is capped
   (200 by default, configurable).
 - Emoji search — 6-wide grid, hover tooltips, Enter copies
 

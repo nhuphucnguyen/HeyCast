@@ -192,6 +192,13 @@ final class PanelController: NSObject, NSWindowDelegate {
                 let index = Int(event.charactersIgnoringModifiers!)! - 1
                 openResult(at: index)
                 return nil
+            case "p":
+                // Maccy's pin shortcut; only meaningful on the clipboard page.
+                if page == .clipboard, model.filteredClipboardItems.indices.contains(model.selectedIndex) {
+                    model.toggleClipboardPin(model.filteredClipboardItems[model.selectedIndex])
+                    return nil
+                }
+                return event
             case "r":
                 model.reloadConfig()
                 return nil
