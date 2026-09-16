@@ -116,6 +116,7 @@ final class AppIndex {
             }
     }
 
+    @discardableResult
     static func terminateApp(named name: String) -> Bool {
         let app = NSWorkspace.shared.runningApplications.first {
             $0.activationPolicy == .regular && $0.localizedName?.lowercased() == name.lowercased()

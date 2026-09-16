@@ -35,7 +35,7 @@ enum Calculator {
 
     private static func tokenize(_ input: String) -> [Token] {
         var tokens: [Token] = []
-        var chars = Array(input)
+        let chars = Array(input)
         var i = 0
         while i < chars.count {
             let c = chars[i]
