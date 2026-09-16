@@ -84,17 +84,17 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: show/hide
 
     private func showPanel() {
-        NSLog("SwiftCast: showPanel (frame before: \(panel.frame))")
+        NSLog("HeyCast: showPanel (frame before: \(panel.frame))")
         positionPanelIfNeeded()
         resizeToFitContent()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         isPositionedOnce = true
-        NSLog("SwiftCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
+        NSLog("HeyCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
     }
 
     private func hidePanel() {
-        NSLog("SwiftCast: hidePanel called")
+        NSLog("HeyCast: hidePanel called")
         panel.orderOut(nil)
     }
 
@@ -240,20 +240,20 @@ final class PanelController: NSObject, NSWindowDelegate {
     func captureAllWindows() {
         for (index, window) in NSApp.windows.enumerated() where window.isVisible && window.frame.width > 1 && window.windowNumber > 0 {
             let label = window == panel ? "panel" : "win\(index)"
-            captureWindow(window, to: URL(fileURLWithPath: "/tmp/swiftcast_\(label).png"))
+            captureWindow(window, to: URL(fileURLWithPath: "/tmp/heycast_\(label).png"))
         }
     }
 
     private func captureWindow(_ window: NSWindow, to url: URL) {
         let number = window.windowNumber
-        NSLog("SwiftCast: capturing window num=\(number) title=\(window.title) visible=\(window.isVisible)")
+        NSLog("HeyCast: capturing window num=\(number) title=\(window.title) visible=\(window.isVisible)")
         guard number > 0, number < Int(UInt32.max) else { return }
         let windowID = CGWindowID(UInt32(number))
         if let cgImage = CGWindowListCreateImage(.infinite, .optionIncludingWindow, windowID, [.bestResolution]) {
             let rep = NSBitmapImageRep(cgImage: cgImage)
             if let png = rep.representation(using: .png, properties: [:]) {
                 try? png.write(to: url)
-                NSLog("SwiftCast: captured \(url.path)")
+                NSLog("HeyCast: captured \(url.path)")
             }
         }
     }
@@ -263,7 +263,7 @@ final class PanelController: NSObject, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) {
         // Hide when the launcher loses focus, unless the settings window
         // (owned by the same app) took it.
-        if let key = NSApp.keyWindow, key != panel, key.identifier == NSUserInterfaceItemIdentifier("SwiftCastSettings") {
+        if let key = NSApp.keyWindow, key != panel, key.identifier == NSUserInterfaceItemIdentifier("HeyCastSettings") {
             return
         }
         if model.panelIsVisible {

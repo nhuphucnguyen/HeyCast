@@ -26,13 +26,13 @@ struct ClipboardEntry: Identifiable, Equatable {
 /// RustCast's clipboard.db schema).
 final class ClipboardStore {
     private var db: OpaquePointer?
-    private let queue = DispatchQueue(label: "com.swiftcast.clipboard-db")
+    private let queue = DispatchQueue(label: "com.heycast.clipboard-db")
 
     init() {
         let url = Config.directory.appendingPathComponent("clipboard.db")
         try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
         guard sqlite3_open(url.path, &db) == SQLITE_OK else {
-            NSLog("SwiftCast: failed to open clipboard db at \(url.path)")
+            NSLog("HeyCast: failed to open clipboard db at \(url.path)")
             db = nil
             return
         }

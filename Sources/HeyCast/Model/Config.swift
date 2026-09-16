@@ -9,7 +9,7 @@ enum MainPane: String, Codable, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .blank: return "SwiftCast"
+        case .blank: return "HeyCast"
         case .favourites: return "Favourites"
         case .frequentlyUsed: return "Frequently Used"
         case .events: return "Events"
@@ -69,7 +69,7 @@ struct Config: Codable {
 
     static let directory: URL = {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        return base.appendingPathComponent("SwiftCast", isDirectory: true)
+        return base.appendingPathComponent("HeyCast", isDirectory: true)
     }()
 
     static var fileURL: URL { directory.appendingPathComponent("config.json") }

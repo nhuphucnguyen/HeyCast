@@ -1,10 +1,10 @@
 #!/bin/zsh
-# Build SwiftCast and assemble a proper macOS .app bundle.
+# Build HeyCast and assemble a proper macOS .app bundle.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
-APP_NAME="SwiftCast"
+APP_NAME="HeyCast"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 VERSION="1.0.0"
@@ -36,7 +36,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key><string>$APP_NAME</string>
-    <key>CFBundleIdentifier</key><string>com.swiftcast.app</string>
+    <key>CFBundleIdentifier</key><string>com.heycast.app</string>
     <key>CFBundleName</key><string>$APP_NAME</string>
     <key>CFBundleDisplayName</key><string>$APP_NAME</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -47,14 +47,14 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>LSUIElement</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSCalendarsUsageDescription</key>
-    <string>SwiftCast can show your upcoming calendar events on the empty launcher page.</string>
+    <string>HeyCast can show your upcoming calendar events on the empty launcher page.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>
-            <key>CFBundleURLName</key><string>com.swiftcast.app.url</string>
+            <key>CFBundleURLName</key><string>com.heycast.app.url</string>
             <key>CFBundleURLSchemes</key>
             <array>
-                <string>swiftcast</string>
+                <string>heycast</string>
             </array>
         </dict>
     </array>

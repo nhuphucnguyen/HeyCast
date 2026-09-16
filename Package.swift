@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftCast",
+    name: "HeyCast",
     platforms: [.macOS(.v13)],
     targets: [
         .executableTarget(
-            name: "SwiftCast",
-            path: "Sources/SwiftCast",
+            name: "HeyCast",
+            path: "Sources/HeyCast",
             resources: [
                 .process("Resources")
             ],

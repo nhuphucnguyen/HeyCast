@@ -1,4 +1,4 @@
-// Renders the SwiftCast app icon (gradient rounded square + bolt) and writes
+// Renders the HeyCast app icon (gradient rounded square + bolt) and writes
 // iconset PNGs; `make_app.sh` turns them into an .icns with iconutil.
 // Usage: swift scripts/make_icon.swift <output-iconset-dir>
 import AppKit

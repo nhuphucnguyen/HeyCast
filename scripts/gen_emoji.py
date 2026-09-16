@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate emoji.json for SwiftCast from Unicode character data.
+"""Generate emoji.json for HeyCast from Unicode character data.
 
 Emits a JSON array of {"c": "<emoji>", "n": "<lowercase name>"} for
 single-codepoint emoji across the common emoji blocks. Rerun to refresh.
