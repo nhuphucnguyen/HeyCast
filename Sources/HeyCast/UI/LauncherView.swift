@@ -23,6 +23,15 @@ struct LauncherView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            // Guarantees readable text over the vibrancy material, whatever
+            // window is behind the panel. Dark mode keeps its previous
+            // vibrancy-only look (its palette already carries the tint).
+            if !model.theme.isDark {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(model.theme.backgroundColor)
+            }
+        }
         .environment(\.heycastTheme, model.theme)
         .onReceive(model.$panelIsVisible) { visible in
             searchFocused = visible
