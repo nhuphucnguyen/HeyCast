@@ -32,7 +32,7 @@ enum LoginItemService {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            NSLog("SwiftCast: SMAppService error: \(error.localizedDescription)")
+            NSLog("HeyCast: SMAppService error: \(error.localizedDescription)")
         }
     }
 }

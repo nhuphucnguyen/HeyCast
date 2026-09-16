@@ -1,14 +1,15 @@
-# SwiftCast — Plan
+# HeyCast — Plan
 
 A native Swift/AppKit/SwiftUI rewrite of [RustCast](../rustcast), a Raycast-style
-launcher for macOS. This project replaces the Rust/iced implementation with a
-pure-Apple stack so it can lean on the platform directly: AppKit windows,
+launcher for macOS — *Hey* because that's the word that starts everything,
+*cast* because you call it out to invoke it. The project replaces the Rust/iced
+implementation with a pure-Apple stack so it can lean on the platform directly: AppKit windows,
 LaunchServices, Spotlight, Carbon hotkeys, the Accessibility API, haptics,
 SMAppService, and more.
 
 ## Why native
 
-| RustCast (Rust)                     | SwiftCast (native macOS)                                  |
+| RustCast (Rust)                     | HeyCast (native macOS)                                  |
 | ----------------------------------- | --------------------------------------------------------- |
 | iced UI in a winit window           | AppKit `NSPanel` + SwiftUI content + `NSVisualEffectView` |
 | `global-hotkey` crate (event tap)   | Carbon `RegisterEventHotKey` (no permissions needed)      |
@@ -22,7 +23,7 @@ SMAppService, and more.
 | `tray-icon` crate                   | `NSStatusItem` + `NSMenu`                                 |
 | private `MTActuator` IOKit haptics  | `NSHapticFeedbackManager` (public API)                    |
 | `SMAppService` via objc2            | `SMAppService.mainApp` directly                           |
-| TOML config (`toml` crate)          | JSON config (Codable) in `~/Library/Application Support/SwiftCast/` |
+| TOML config (`toml` crate)          | JSON config (Codable) in `~/Library/Application Support/HeyCast/` |
 | window tiling via AX C functions    | same `AXUIElement` C API (no Swift wrapper exists)        |
 | bundled emoji dataset via crate     | generated `emoji.json` (committed, from Unicode data)     |
 
@@ -41,7 +42,7 @@ SMAppService, and more.
 - Emoji page: 6-wide grid, hover tooltip, Enter/click copies.
 - Window tiling: 12 positions (halves/quarters/thirds/maximize) via AX API.
 - Settings window (General / Appearance / Commands), config hot-reload (`⌘R`).
-- Menu bar status item with menu, `swiftcast://` URL scheme, start-at-login,
+- Menu bar status item with menu, `heycast://` URL scheme, start-at-login,
   input-source switching, haptic ticks, calendar events main page.
 
 ## Deliberate deviations
@@ -56,7 +57,7 @@ SMAppService, and more.
 ## Architecture
 
 ```
-Sources/SwiftCast/
+Sources/HeyCast/
 ├── Main.swift               # NSApplication bootstrap (accessory app)
 ├── AppDelegate.swift        # lifecycle, menus, URL scheme
 ├── Model/
@@ -85,7 +86,7 @@ Sources/SwiftCast/
 └── Resources/emoji.json
 
 scripts/
-├── make_app.sh              # assemble SwiftCast.app from `swift build` output
+├── make_app.sh              # assemble HeyCast.app from `swift build` output
 ├── make_icon.swift          # draw the app icon, emit .icns
 └── gen_emoji.py             # regenerate emoji.json from Unicode data
 ```
@@ -104,7 +105,7 @@ scripts/
 ## Verification
 
 `scripts/make_app.sh` builds the release binary and assembles
-`build/SwiftCast.app`. Launch it, drive it with the desktop-automation tools,
+`build/HeyCast.app`. Launch it, drive it with the desktop-automation tools,
 and confirm visually: panel appears centered-top on `⌥Space`, app results with
 real icons, calculator/URL/web rows, `cbhist` and emoji pages, settings window,
 dynamic window height, hide-on-blur and Esc cascade.

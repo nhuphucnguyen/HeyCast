@@ -5,7 +5,7 @@ import SwiftUI
 /// config and pushes it into the model (which persists + applies hotkeys).
 @MainActor
 final class SettingsWindowController {
-    static let windowIdentifier = "SwiftCastSettings"
+    static let windowIdentifier = "HeyCastSettings"
 
     private var window: NSWindow?
     private weak var model: LauncherModel?
@@ -13,7 +13,7 @@ final class SettingsWindowController {
     func show(model: LauncherModel) {
         self.model = model
         if window == nil {
-            NSLog("SwiftCast: creating settings window")
+            NSLog("HeyCast: creating settings window")
             let content = SettingsView(model: model)
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 620, height: 480),
@@ -21,7 +21,7 @@ final class SettingsWindowController {
                 backing: .buffered,
                 defer: false
             )
-            window.title = "SwiftCast Settings"
+            window.title = "HeyCast Settings"
             window.identifier = NSUserInterfaceItemIdentifier(Self.windowIdentifier)
             window.isReleasedWhenClosed = false
             window.center()
@@ -31,7 +31,7 @@ final class SettingsWindowController {
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        NSLog("SwiftCast: settings window shown (visible: \(window?.isVisible ?? false))")
+        NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
     }
 
     func hide() {

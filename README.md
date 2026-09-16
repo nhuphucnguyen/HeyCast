@@ -1,11 +1,12 @@
-# SwiftCast ⚡️
+# HeyCast 👋⚡️
 
-A native Swift/AppKit/SwiftUI rewrite of [RustCast](https://github.com/MystikoLab/rustcast) —
-a blazing-fast, Raycast-style popup launcher for macOS. SwiftCast replaces the
-Rust/iced stack with pure Apple frameworks so every feature leans on the
-platform directly.
+**Hey** — the first word that starts everything. **Cast** — call it out, invoke it.
+HeyCast is a native Swift/AppKit/SwiftUI rewrite of
+[RustCast](https://github.com/MystikoLab/rustcast): a blazing-fast,
+Raycast-style popup launcher for macOS. It replaces the Rust/iced stack with
+pure Apple frameworks so every feature leans on the platform directly.
 
-![SwiftCast](docs/screenshot-search.png)
+![HeyCast](docs/screenshot-search.png)
 
 ## Features
 
@@ -36,7 +37,7 @@ platform directly.
 - Menu bar status item (`NSStatusItem`) with full menu
 - Haptic feedback (`NSHapticFeedbackManager`), input-source restore (`TIS`),
   start-at-login (`SMAppService`), calendar events (`EventKit`)
-- `swiftcast://` URL scheme, dark/light/system theming, custom fonts/colors,
+- `heycast://` URL scheme, dark/light/system theming, custom fonts/colors,
   settings window (General / Appearance / Commands), config hot-reload (`⌘R`)
 
 ## Build & run
@@ -44,8 +45,8 @@ platform directly.
 Requirements: macOS 13+, Xcode (built and tested with Xcode 27 beta / Swift 6.4).
 
 ```sh
-./scripts/make_app.sh          # swift build -c release + assemble build/SwiftCast.app
-open build/SwiftCast.app       # LSUIElement: lives in the menu bar
+./scripts/make_app.sh          # swift build -c release + assemble build/HeyCast.app
+open build/HeyCast.app         # LSUIElement: lives in the menu bar
 ```
 
 Press `⌥Space` (or click the ⚡️ menu bar icon → Toggle View) to open the launcher.
@@ -67,7 +68,7 @@ start-at-login.
 
 ## Configuration
 
-`~/Library/Application Support/SwiftCast/config.json` — created with defaults on
+`~/Library/Application Support/HeyCast/config.json` — created with defaults on
 first launch. Notable keys: `toggleHotkey` / `clipboardHotkey` (syntax
 `ALT+SPACE`, `SUPER+SHIFT+C`, `CTRL+ALT+T`, … — `SUPER` = `CMD`), `placeholder`,
 `searchURL` (`%s` is the query), `mainPage` (`blank` / `favourites` /
@@ -78,15 +79,15 @@ lives in `ranking.json` next to it, clipboard history in `clipboard.db`.
 
 ## URL scheme
 
-`swiftcast://show`, `swiftcast://toggle`, `swiftcast://quit`,
-`swiftcast://open?target=safari`, `swiftcast://page?name=emoji|clipboard|files`,
-`swiftcast://query?text=…`, `swiftcast://settings` plus debug helpers
+`heycast://show`, `heycast://toggle`, `heycast://quit`,
+`heycast://open?target=safari`, `heycast://page?name=emoji|clipboard|files`,
+`heycast://query?text=…`, `heycast://settings` plus debug helpers
 (`screenshot`, `capture` write window PNGs to `/tmp`).
 
 ## Project layout
 
 See [PLAN.md](PLAN.md) for the Rust→Swift mapping table and architecture.
-Sources live under `Sources/SwiftCast/` (`Model/`, `Search/`, `Services/`, `UI/`),
+Sources live under `Sources/HeyCast/` (`Model/`, `Search/`, `Services/`, `UI/`),
 packaging in `scripts/`.
 
 ## Deviations from RustCast

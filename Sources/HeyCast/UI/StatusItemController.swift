@@ -10,7 +10,7 @@ final class StatusItemController {
         self.model = model
         guard model.config.showTrayIcon else { return }
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let icon = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "SwiftCast")?
+        let icon = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: "HeyCast")?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
         item.button?.image = icon
         item.menu = buildMenu()
@@ -30,7 +30,7 @@ final class StatusItemController {
 
     private func buildMenu() -> NSMenu {
         let menu = NSMenu()
-        let version = NSMenuItem(title: "SwiftCast v\(LauncherModel.appVersion)", action: nil, keyEquivalent: "")
+        let version = NSMenuItem(title: "HeyCast v\(LauncherModel.appVersion)", action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
 
@@ -63,7 +63,7 @@ final class StatusItemController {
 
         menu.addItem(.separator())
 
-        let about = NSMenuItem(title: "About SwiftCast", action: #selector(showAbout), keyEquivalent: "")
+        let about = NSMenuItem(title: "About HeyCast", action: #selector(showAbout), keyEquivalent: "")
         about.target = self
         menu.addItem(about)
 
@@ -73,7 +73,7 @@ final class StatusItemController {
 
         menu.addItem(.separator())
 
-        let quit = NSMenuItem(title: "Quit SwiftCast", action: #selector(quit), keyEquivalent: "q")
+        let quit = NSMenuItem(title: "Quit HeyCast", action: #selector(quit), keyEquivalent: "q")
         quit.keyEquivalentModifierMask = [.command]
         quit.target = self
         menu.addItem(quit)
@@ -90,7 +90,7 @@ final class StatusItemController {
     }
     @objc private func showAbout() {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
-            .applicationName: "SwiftCast",
+            .applicationName: "HeyCast",
             .applicationVersion: LauncherModel.appVersion,
         ])
     }

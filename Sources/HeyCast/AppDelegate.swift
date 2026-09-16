@@ -18,7 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.shared = self
     }
 
-    /// Setup runs here (before Apple events like swiftcast:// URLs arrive).
+    /// Setup runs here (before Apple events like heycast:// URLs arrive).
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
@@ -43,7 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if model.config.showOnStartup {
             model.show()
         }
-        NSLog("SwiftCast started (v%@)", LauncherModel.appVersion)
+        NSLog("HeyCast started (v%@)", LauncherModel.appVersion)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
@@ -52,30 +52,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model?.saveRankingNow()
     }
 
-    // MARK: URL scheme (swiftcast://show | toggle | quit | open?target=NAME)
+    // MARK: URL scheme (heycast://show | toggle | quit | open?target=NAME)
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        NSLog("SwiftCast: open URLs called: \(urls)")
+        NSLog("HeyCast: open URLs called: \(urls)")
         guard model != nil else {
             pendingURLs.append(contentsOf: urls)
             return
         }
-        for url in urls where url.scheme?.lowercased() == "swiftcast" {
+        for url in urls where url.scheme?.lowercased() == "heycast" {
             handleURLScheme(url)
         }
     }
 
     private func handleURLScheme(_ url: URL) {
         let host = url.host?.lowercased() ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        NSLog("SwiftCast: URL scheme action '\(host)'")
+        NSLog("HeyCast: URL scheme action '\(host)'")
         switch host {
         case "show":
             if !model.panelIsVisible { model.show() }
         case "toggle":
             model.toggle()
         case "screenshot":
-            // Debug aid: capture the launcher panel to /tmp/swiftcast_panel.png
-            panelController.capturePanel(to: URL(fileURLWithPath: "/tmp/swiftcast_panel.png"))
+            // Debug aid: capture the launcher panel to /tmp/heycast_panel.png
+            panelController.capturePanel(to: URL(fileURLWithPath: "/tmp/heycast_panel.png"))
         case "capture":
             panelController.captureAllWindows()
         case "query":
@@ -134,9 +134,9 @@ func buildMainMenu() -> NSMenu {
     let appItem = NSMenuItem()
     menu.addItem(appItem)
     let appMenu = NSMenu()
-    appMenu.addItem(NSMenuItem(title: "About SwiftCast", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
+    appMenu.addItem(NSMenuItem(title: "About HeyCast", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: ""))
     appMenu.addItem(.separator())
-    appMenu.addItem(NSMenuItem(title: "Quit SwiftCast", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    appMenu.addItem(NSMenuItem(title: "Quit HeyCast", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     appItem.submenu = appMenu
 
     let editItem = NSMenuItem()

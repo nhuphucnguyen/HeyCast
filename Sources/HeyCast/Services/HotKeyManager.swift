@@ -140,7 +140,7 @@ final class HotKeyManager {
         let id = nextID
         nextID += 1
         var ref: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x53574353) /* SWCS */, id: id)
+        let hotKeyID = EventHotKeyID(signature: OSType(0x48455943) /* HEYC */, id: id)
         let status = RegisterEventHotKey(
             shortcut.keyCode,
             shortcut.modifiers.carbonFlags,
@@ -150,7 +150,7 @@ final class HotKeyManager {
             &ref
         )
         guard status == noErr else {
-            NSLog("SwiftCast: failed to register hotkey %@ (%d)", shortcut.displayString, status)
+            NSLog("HeyCast: failed to register hotkey %@ (%d)", shortcut.displayString, status)
             return
         }
         registrations.append(Registration(shortcut: shortcut, id: id, hotKeyRef: ref))

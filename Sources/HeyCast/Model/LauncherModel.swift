@@ -360,7 +360,7 @@ final class LauncherModel: ObservableObject {
         // Quit …
         if query.lowercased().hasPrefix("quit") {
             out.append(ResultItem(id: "builtin-quit-self",
-                                  title: "Quit SwiftCast",
+                                  title: "Quit HeyCast",
                                   subtitle: "Utility",
                                   icon: .symbol("power"),
                                   action: .quitSelf))
@@ -472,7 +472,7 @@ final class LauncherModel: ObservableObject {
 
     private func builtinResults() -> [ResultItem] {
         var out = [
-            ResultItem(id: "builtin-settings", title: "Open SwiftCast Preferences", subtitle: "Settings",
+            ResultItem(id: "builtin-settings", title: "Open HeyCast Preferences", subtitle: "Settings",
                        icon: .symbol("gearshape"), searchName: "settings", action: .openSettings),
             ResultItem(id: "builtin-emoji", title: "Search for an Emoji", subtitle: "Emoji search",
                        icon: .symbol("face.smiling"), searchName: "emoji", action: .switchPage(.emoji)),
@@ -480,9 +480,9 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("clipboard"), searchName: "clipboard", action: .switchPage(.clipboard)),
             ResultItem(id: "builtin-files", title: "Search for a file", subtitle: "File search",
                        icon: .symbol("folder"), searchName: "file search", action: .switchPage(.files)),
-            ResultItem(id: "builtin-reload", title: "Reload SwiftCast", subtitle: "Reloads config & apps",
+            ResultItem(id: "builtin-reload", title: "Reload HeyCast", subtitle: "Reloads config & apps",
                        icon: .symbol("arrow.clockwise"), searchName: "reload", action: .reload),
-            ResultItem(id: "builtin-version", title: "SwiftCast v\(Self.appVersion)", subtitle: "Native Swift port of RustCast",
+            ResultItem(id: "builtin-version", title: "HeyCast v\(Self.appVersion)", subtitle: "Native Swift port of RustCast",
                        icon: .symbol("bolt.fill"), action: .display),
             ResultItem(id: "builtin-ferris", title: "Ferris Plushies", subtitle: "Easter egg",
                        icon: .symbol("crown"), action: .openURL(URL(string: "https://ferris.rs")!)),

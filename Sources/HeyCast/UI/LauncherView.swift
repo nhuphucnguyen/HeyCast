@@ -23,7 +23,7 @@ struct LauncherView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .environment(\.swiftcastTheme, model.theme)
+        .environment(\.heycastTheme, model.theme)
         .onReceive(model.$panelIsVisible) { visible in
             searchFocused = visible
         }
@@ -146,7 +146,7 @@ struct LauncherView: View {
 
     private var pageLabel: String {
         switch model.page {
-        case .main: return "SwiftCast"
+        case .main: return "HeyCast"
         case .files: return "File search"
         case .clipboard: return "Clipboard"
         case .emoji: return "Emoji"
@@ -274,7 +274,7 @@ private struct ThemeKey: EnvironmentKey {
 }
 
 extension EnvironmentValues {
-    var swiftcastTheme: Theme {
+    var heycastTheme: Theme {
         get { self[ThemeKey.self] }
         set { self[ThemeKey.self] = newValue }
     }
