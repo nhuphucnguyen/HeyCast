@@ -579,6 +579,17 @@ final class LauncherModel: ObservableObject {
 
     func copyClipboardEntry(_ entry: ClipboardEntry) {
         ClipboardService.copy(entry: entry)
+        // Selecting an entry promotes it to the top, Maccy-style: it
+        // re-captures its own copies with a fresh timestamp; ours updates
+        // the row directly (the org.heycast.self marker keeps the capture
+        // poller from promoting it a second time).
+        if config.clipboardHistoryEnabled,
+           let updated = clipboardStore.touchExisting(kind: entry.kind, text: entry.text,
+                                                      imageData: entry.imageData) {
+            clipboardItems.removeAll { $0.id == updated.id }
+            clipboardItems.append(updated)
+            resortClipboardItems()
+        }
         if config.clipboardPasteOnSelect, let pid = frontmostApp?.processIdentifier {
             hide()
             ClipboardService.simulatePaste(toPid: pid)
