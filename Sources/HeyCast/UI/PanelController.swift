@@ -69,12 +69,16 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func applyThemeBackground() {
+        vibrancyView.blendingMode = .behindWindow
         if model.theme.blur {
-            vibrancyView.material = .hudWindow
+            // .hudWindow is always dark and ignores appearance, which made the
+            // light theme unreadable; use a light-following material for light.
+            vibrancyView.material = model.theme.isDark ? .hudWindow : .windowBackground
             vibrancyView.isHidden = false
         } else {
             vibrancyView.isHidden = false
             vibrancyView.material = .titlebar
+            vibrancyView.blendingMode = .withinWindow
             vibrancyView.blendingMode = .withinWindow
         }
     }
