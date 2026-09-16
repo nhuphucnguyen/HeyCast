@@ -63,9 +63,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         model.onShowPanel = { [weak self] in self?.showPanel() }
         model.onHidePanel = { [weak self] in self?.hidePanel() }
         model.onLayoutChanged = { [weak self] in self?.resizeToFitContent() }
-        model.onOpenSettings = { [weak self] in
-            AppDelegate.shared?.showSettings()
-        }
+        model.onOpenSettings = { AppDelegate.shared?.showSettings() }
 
         installKeyMonitor()
     }

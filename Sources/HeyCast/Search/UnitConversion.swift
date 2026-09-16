@@ -79,7 +79,7 @@ enum UnitConversion {
         // number
         guard let value = Double(tokens[0]) else { return nil }
 
-        var unitTokens = Array(tokens.dropFirst())
+        let unitTokens = Array(tokens.dropFirst())
         if unitTokens.first == "to" || unitTokens.first == "in" { return nil }
         if unitTokens.count >= 2 && (unitTokens[1] == "to" || unitTokens[1] == "in") {
             // "<num> <unit> to <unit>"
