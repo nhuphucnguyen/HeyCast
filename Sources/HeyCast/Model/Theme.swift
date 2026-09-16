@@ -24,12 +24,15 @@ struct Theme {
         blur: true, showIcons: true, showScrollBar: false, fontName: nil, isDark: true
     )
 
+    /// Bright frosted panel, near-black text, mid-gray selection highlight
+    /// (contrast guaranteed by the background overlay in LauncherView,
+    /// regardless of what's behind the panel).
     static let light = Theme(
-        textColor: Color(srgbRed: 0.05, green: 0.05, blue: 0.05, alpha: 1),
-        backgroundColor: Color(srgbRed: 0.97, green: 0.97, blue: 0.98, alpha: 0.94),
-        secondaryBackground: Color(srgbRed: 0.90, green: 0.90, blue: 0.92, alpha: 1),
-        focusedRow: Color(srgbRed: 0.78, green: 0.78, blue: 0.82, alpha: 0.9),
-        unfocusedRow: Color(srgbRed: 0.90, green: 0.90, blue: 0.92, alpha: 0.6),
+        textColor: Color(srgbRed: 0.10, green: 0.10, blue: 0.12, alpha: 1),
+        backgroundColor: Color(srgbRed: 0.955, green: 0.955, blue: 0.97, alpha: 0.80),
+        secondaryBackground: Color(srgbRed: 1, green: 1, blue: 1, alpha: 0.60),
+        focusedRow: Color(srgbRed: 0.76, green: 0.76, blue: 0.78, alpha: 0.95),
+        unfocusedRow: Color(srgbRed: 0.85, green: 0.85, blue: 0.88, alpha: 0.30),
         blur: true, showIcons: true, showScrollBar: false, fontName: nil, isDark: false
     )
 
