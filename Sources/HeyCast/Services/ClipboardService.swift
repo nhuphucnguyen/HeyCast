@@ -151,6 +151,12 @@ final class ClipboardService {
         pasteboard.types?.contains { $0 == .png || $0 == .tiff } ?? false
     }
 
+    /// True when the clipboard holds non-empty text (⌘V should paste text
+    /// normally rather than attach an image).
+    static var clipboardHasText: Bool {
+        !(pasteboard.string(forType: .string) ?? "").isEmpty
+    }
+
     /// The clipboard image as PNG (screenshots land as TIFF or PNG), long
     /// edge downscaled to 2000px so requests stay a sane size.
     static func clipboardImagePNG() -> Data? {

@@ -44,11 +44,14 @@ pure Apple frameworks so every feature leans on the platform directly.
     notification, waiting in the inbox (unread dot + badge on the menu
     bar icon) until you read it
   - `heycast://ask?text=…&agent=alias` does the same from scripts
-  - copy a screenshot and the next agent request attaches it
-    automatically (vision models only — configure an optional vision
-    model + base URL per agent; z.ai's `glm-5.3-flash` accepts images
-    on the coding endpoint itself, while text-only endpoints/models
-    need a vision model on e.g. `https://api.z.ai/api/paas/v4`)
+  - images: ⌘V pastes a screenshot from the clipboard (a chip under the
+    search bar acknowledges it, ⌘V replaces, ✕ removes); a screenshot
+    sitting on the clipboard is attached automatically. Requires a
+    vision-capable model — configure an optional vision model + base
+    URL per agent (z.ai's `glm-5.3-flash` accepts images on the coding
+    endpoint itself; text-only endpoints need a vision model on e.g.
+    `https://api.z.ai/api/paas/v4`). If the model rejects images,
+    HeyCast retries text-only and says so
   - failed requests get a Retry button
 
   ```json

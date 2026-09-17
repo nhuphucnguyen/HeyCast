@@ -22,6 +22,9 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var emojiResults: [EmojiEntry] = []
     @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
+    /// Image pasted with ⌘V (or auto-attached from the clipboard) that rides
+    /// along with the next agent question.
+    @Published var pendingImage: Data? = nil
     @Published private(set) var showFavoriteHint = false
 
     // MARK: config & stores
@@ -754,6 +757,26 @@ final class LauncherModel: ObservableObject {
             ?? config.agents.first { $0.name.lowercased() == alias.lowercased() }
     }
 
+    /// ⌘V with an image on the clipboard: attach it for the next agent
+    /// question. The chip under the search bar acknowledges it.
+    func pasteClipboardImage() {
+        if let image = ClipboardService.clipboardImagePNG() {
+            pendingImage = image
+        }
+    }
+
+    func clearPendingImage() {
+        pendingImage = nil
+    }
+
+    /// Explicit ⌘V attachment wins; otherwise a screenshot sitting on the
+    /// clipboard auto-attaches (the "copy → ask" flow).
+    private func nextAgentImage() -> Data? {
+        let image = pendingImage ?? ClipboardService.clipboardImagePNG()
+        pendingImage = nil
+        return image
+    }
+
     /// Routes "@alias question" typed in the main bar; nil when the query
     /// isn't an agent request (or the alias is unknown). Matches as soon as
     /// the space after the alias is typed — `text` may still be empty.
@@ -768,7 +791,7 @@ final class LauncherModel: ObservableObject {
     @discardableResult
     func sendToAgent(alias: String, text: String, showLoading: Bool = true) -> Bool {
         guard let agent = agent(forAlias: alias) else { return false }
-        let id = assistantService.send(agent: agent, text: text)
+        let id = assistantService.send(agent: agent, text: text, imageData: nextAgentImage())
         assistantUpdated()
         if showLoading { presentPendingAssistant(id) }
         return true
@@ -782,7 +805,7 @@ final class LauncherModel: ObservableObject {
         guard !trimmed.isEmpty else { return }
         let agent = config.agents.first { $0.alias == config.defaultAgent } ?? config.agents.first
         guard let agent else { return }
-        let id = assistantService.send(agent: agent, text: trimmed)
+        let id = assistantService.send(agent: agent, text: trimmed, imageData: nextAgentImage())
         assistantUpdated()
         query = ""
         if showLoading { presentPendingAssistant(id) }

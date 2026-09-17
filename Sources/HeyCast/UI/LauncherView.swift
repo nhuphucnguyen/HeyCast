@@ -13,6 +13,12 @@ struct LauncherView: View {
                 .padding(.top, 10)
                 .padding(.horizontal, 14)
 
+            if model.pendingImage != nil {
+                attachedImageChip
+                    .padding(.top, 6)
+                    .padding(.horizontal, 14)
+            }
+
             content
                 .padding(.top, 6)
 
@@ -36,6 +42,37 @@ struct LauncherView: View {
         .onReceive(model.$panelIsVisible) { visible in
             searchFocused = visible
         }
+    }
+
+    /// Pending image pasted with ⌘V — sent with the next agent question.
+    private var attachedImageChip: some View {
+        HStack(spacing: 8) {
+            if let data = model.pendingImage, let image = NSImage(data: data) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 30)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+            }
+            Text("Image attached — sent with your question")
+                .font(.system(size: 11))
+                .foregroundStyle(model.theme.textColor.alpha(0.6))
+            Spacer(minLength: 0)
+            Button {
+                model.clearPendingImage()
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundStyle(model.theme.textColor.alpha(0.4))
+            }
+            .buttonStyle(.plain)
+            .help("Remove attached image")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(model.theme.secondaryBackground.alpha(0.5))
+        )
     }
 
     private var showFooter: Bool {

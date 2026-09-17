@@ -201,6 +201,16 @@ final class PanelController: NSObject, NSWindowDelegate {
                 let index = Int(event.charactersIgnoringModifiers!)! - 1
                 openResult(at: index)
                 return nil
+            case "v":
+                // ⌘V with an image on the clipboard: attach it for the next
+                // agent question (the chip under the search bar acknowledges
+                // it). With text on the clipboard, normal text paste wins.
+                if (page == .main || page == .assistant),
+                   ClipboardService.clipboardHasImage, !ClipboardService.clipboardHasText {
+                    model.pasteClipboardImage()
+                    return nil
+                }
+                return event
             case "p":
                 // Maccy's pin shortcut; only meaningful on the clipboard page.
                 if page == .clipboard, model.filteredClipboardItems.indices.contains(model.selectedIndex) {
