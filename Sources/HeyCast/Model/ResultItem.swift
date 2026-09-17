@@ -30,6 +30,7 @@ enum ResultAction: Equatable {
     case reload
     case openEvent(String) // calendar identifier
     case display
+    case askAgent(alias: String, text: String) // fire-and-forget assistant request
 }
 
 struct ResultItem: Identifiable, Equatable {
