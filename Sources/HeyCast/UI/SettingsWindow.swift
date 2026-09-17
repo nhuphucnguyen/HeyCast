@@ -261,9 +261,15 @@ struct SettingsView: View {
     private var aliasClean: String {
         alias.trimmingCharacters(in: .whitespaces).lowercased()
     }
+    /// Aliases become the "@alias" prefix, so they can't contain whitespace;
+    /// use _ to separate words.
+    private var aliasHasSpace: Bool {
+        aliasClean.contains(where: { $0 == " " || $0 == "\t" })
+    }
     private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
             && !aliasClean.isEmpty
+            && !aliasHasSpace
             && !baseURL.trimmingCharacters(in: .whitespaces).isEmpty
             && !takenAliases.contains(aliasClean)
     }
@@ -272,6 +278,7 @@ struct SettingsView: View {
         if takenAliases.contains(aliasClean) { return "That alias is already used" }
         if name.trimmingCharacters(in: .whitespaces).isEmpty { return "Name is required" }
         if aliasClean.isEmpty { return "Alias is required" }
+        if aliasHasSpace { return "Alias cannot contain spaces — use _ instead" }
         if baseURL.trimmingCharacters(in: .whitespaces).isEmpty { return "URL is required" }
         return nil
     }
@@ -292,10 +299,10 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($nameFocused)
             }
-            field("Alias — you'll type @alias in the search bar") {
+            field("Alias — you'll type @alias in the search bar (no spaces, use _)") {
                 HStack(spacing: 4) {
                     Text("@").foregroundStyle(.secondary)
-                    TextField("hermes", text: $alias)
+                    TextField("hermes_assistant", text: $alias)
                         .textFieldStyle(.roundedBorder)
                         .disableAutocorrection(true)
                 }
