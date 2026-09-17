@@ -90,11 +90,18 @@ final class AssistantStore {
         return rowID
     }
 
-    func updateResponse(id: Int64, response: String) {
+    /// `note` carries a non-fatal warning (e.g. "image not sent") shown with
+    /// the finished response.
+    func updateResponse(id: Int64, response: String, note: String? = nil) {
         queue.sync { [weak self] in
             guard let self else { return }
-            exec("UPDATE assistant_messages SET response = ?, error = NULL, status = 'done', done_at = ? WHERE id = ?",
-                 [response, String(Int64(Date().timeIntervalSince1970 * 1000)), String(id)])
+            if let note {
+                exec("UPDATE assistant_messages SET response = ?, error = ?, status = 'done', done_at = ? WHERE id = ?",
+                     [response, note, String(Int64(Date().timeIntervalSince1970 * 1000)), String(id)])
+            } else {
+                exec("UPDATE assistant_messages SET response = ?, error = NULL, status = 'done', done_at = ? WHERE id = ?",
+                     [response, String(Int64(Date().timeIntervalSince1970 * 1000)), String(id)])
+            }
         }
     }
 
