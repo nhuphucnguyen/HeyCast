@@ -267,15 +267,20 @@ final class LauncherModel: ObservableObject {
         } else {
             results = searchResults(for: query)
             // "@alias question" gets a first-class row so the destination is
-            // visible before you hit Enter.
+            // visible as soon as the alias is typed (before the question).
             if let request = agentRequest(in: query) {
+                let actionable = !request.text.isEmpty
                 results.insert(ResultItem(
                     id: "ask-agent",
-                    title: "Ask \(request.agent.name): \(request.text)",
+                    title: actionable
+                        ? "Ask \(request.agent.name): \(request.text)"
+                        : "Ask \(request.agent.name) — type your question",
                     subtitle: "Assistant — the response arrives in your inbox",
                     icon: .symbol("sparkles"),
                     searchName: nil,
-                    action: .askAgent(alias: request.agent.alias, text: request.text)),
+                    action: actionable
+                        ? .askAgent(alias: request.agent.alias, text: request.text)
+                        : .display),
                     at: 0)
             }
         }
@@ -739,13 +744,14 @@ final class LauncherModel: ObservableObject {
     }
 
     /// Routes "@alias question" typed in the main bar; nil when the query
-    /// isn't an agent request (or the alias is unknown).
+    /// isn't an agent request (or the alias is unknown). Matches as soon as
+    /// the space after the alias is typed — `text` may still be empty.
     private func agentRequest(in query: String) -> (agent: AgentConfig, text: String)? {
         guard query.hasPrefix("@"), let space = query.firstIndex(of: " ") else { return nil }
         let alias = String(query[query.index(after: query.startIndex)..<space])
         guard let agent = agent(forAlias: alias) else { return nil }
         let text = query[query.index(after: space)...].trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? nil : (agent, text)
+        return (agent, text)
     }
 
     @discardableResult
@@ -770,8 +776,10 @@ final class LauncherModel: ObservableObject {
 
     /// Main-bar entry point: an "@alias question" sends immediately (the
     /// panel hides and the answer lands in the inbox + a notification).
+    /// "@alias " with no question yet keeps the panel open for typing.
     func handleMainSubmit() {
         if let request = agentRequest(in: query) {
+            guard !request.text.isEmpty else { return }
             assistantService.send(agent: request.agent, text: request.text)
             assistantUpdated()
             query = ""
