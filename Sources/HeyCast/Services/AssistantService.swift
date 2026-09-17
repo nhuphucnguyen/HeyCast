@@ -36,28 +36,57 @@ final class AssistantService {
 
     private func dispatch(agent: AgentConfig, id: Int64, text: String, imageData: Data?) {
         inFlight.insert(id)
+        let stream: (String) -> Void = { [weak self] delta in
+            self?.streamDelta(id: id, delta: delta)
+        }
         Task { [weak self] in
             guard let self else { return }
             do {
-                let response = try await Self.perform(agent: agent, question: text, imageData: imageData) { [weak self] delta in
-                    self?.streamDelta(id: id, delta: delta)
-                }
+                let response = try await Self.perform(agent: agent, question: text, imageData: imageData, onDelta: stream)
                 self.store.updateResponse(id: id, response: response)
                 self.streamBuffers[id] = nil
-                self.lastStreamFlush[id] = nil
                 NotificationService.shared.post(title: "\(agent.name) responded",
                                                 body: String(response.prefix(120)), messageID: id)
             } catch {
-                self.store.updateError(id: id, error: error.localizedDescription)
-                self.streamBuffers[id] = nil
-                self.lastStreamFlush[id] = nil
-                NotificationService.shared.post(title: "\(agent.name) failed",
-                                                body: String(error.localizedDescription.prefix(120)),
-                                                messageID: id)
+                // Modality rejection (text-only model, image attached): retry
+                // without the image and answer anyway, with a clear note.
+                if imageData != nil, Self.isModalityError(error.localizedDescription) {
+                    self.store.reset(id: id)
+                    do {
+                        let response = try await Self.perform(agent: agent, question: text, imageData: nil, onDelta: stream)
+                        let note = "Image not sent — \(agent.name) rejected it; answered text-only."
+                        self.store.updateResponse(id: id, response: response, note: note)
+                        self.streamBuffers[id] = nil
+                        NotificationService.shared.post(title: "\(agent.name) responded (text only)",
+                                                        body: String(response.prefix(120)), messageID: id)
+                    } catch {
+                        self.store.updateError(id: id, error: error.localizedDescription)
+                        self.streamBuffers[id] = nil
+                        NotificationService.shared.post(title: "\(agent.name) failed",
+                                                        body: String(error.localizedDescription.prefix(120)),
+                                                        messageID: id)
+                    }
+                } else {
+                    self.store.updateError(id: id, error: error.localizedDescription)
+                    self.streamBuffers[id] = nil
+                    NotificationService.shared.post(title: "\(agent.name) failed",
+                                                    body: String(error.localizedDescription.prefix(120)),
+                                                    messageID: id)
+                }
             }
             self.inFlight.remove(id)
             self.onUpdated?()
         }
+    }
+
+    /// Providers word image-rejections differently; catch the common shapes.
+    static func isModalityError(_ message: String) -> Bool {
+        let m = message.lowercased()
+        guard m.contains("image") || m.contains("content.type") || m.contains("multimodal") else {
+            return false
+        }
+        return m.contains("invalid") || m.contains("not support") || m.contains("unsupported")
+            || m.contains("reject") || (m.contains("only") && m.contains("text"))
     }
 
     // MARK: - streaming

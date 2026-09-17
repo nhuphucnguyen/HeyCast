@@ -112,6 +112,15 @@ struct AssistantPageView: View {
                                 .foregroundStyle(.red.opacity(0.8))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         case .done:
+                            if let note = message.error, !note.isEmpty {
+                                HStack(alignment: .top, spacing: 4) {
+                                    Image(systemName: "exclamationmark.triangle")
+                                    Text(note)
+                                }
+                                .font(.system(size: 11))
+                                .foregroundStyle(.orange.opacity(0.8))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                             MarkdownView(text: message.response ?? "", theme: model.theme)
                                 .textSelection(.enabled)
                         }
