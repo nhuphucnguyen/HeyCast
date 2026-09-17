@@ -92,11 +92,8 @@ struct AssistantPageView: View {
                                 .foregroundStyle(.red.opacity(0.8))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         case .done:
-                            Text(message.response ?? "")
-                                .font(.system(size: 14))
-                                .foregroundStyle(model.theme.textColor)
+                            MarkdownView(text: message.response ?? "", theme: model.theme)
                                 .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(8)
