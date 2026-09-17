@@ -111,6 +111,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Same as pressing return on the highlighted row (routes
             // "@alias question" on the main page too).
             model.handleMainSubmit()
+        case "paste-image":
+            // Same as ⌘V with an image on the clipboard: attach it to the
+            // next agent question.
+            model.pasteClipboardImage()
         case "ask":
             // Fire-and-forget: heycast://ask?text=...&agent=alias (silent —
             // no panel pop-up; the answer lands in the inbox + notification)

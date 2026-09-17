@@ -14,14 +14,13 @@ final class AssistantService {
     private var inFlight: Set<Int64> = []
 
     @discardableResult
-    func send(agent: AgentConfig, text: String) -> Int64? {
+    /// `imageData` is the explicit attachment (⌘V paste or clipboard
+    /// auto-attach, decided by the caller).
+    func send(agent: AgentConfig, text: String, imageData: Data?) -> Int64? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        // A screenshot on the clipboard rides along automatically — the
-        // "screenshot → @glm extract the text" flow.
-        let image = ClipboardService.clipboardImagePNG()
-        guard let id = store.insert(agent: agent.name, request: trimmed, imageData: image) else { return nil }
-        dispatch(agent: agent, id: id, text: trimmed, imageData: image)
+        guard let id = store.insert(agent: agent.name, request: trimmed, imageData: imageData) else { return nil }
+        dispatch(agent: agent, id: id, text: trimmed, imageData: imageData)
         onUpdated?()
         return id
     }
