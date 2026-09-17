@@ -135,7 +135,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let tabName = params.first(where: { $0.name == "tab" })?.value?.lowercased()
             let tab = SettingsTab(rawValue: tabName ?? "") ?? .general
             let add = params.first(where: { $0.name == "add" })?.value == "1"
-            settingsController.show(model: model, tab: tab, addAgent: add)
+            let editIndex = params.first(where: { $0.name == "edit" })?.value.flatMap(Int.init)
+            settingsController.show(model: model, tab: tab, addAgent: add, editAgentIndex: editIndex)
         case "quit":
             model.saveRankingNow()
             exit(0)
