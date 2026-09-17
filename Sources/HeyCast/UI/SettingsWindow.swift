@@ -56,6 +56,7 @@ struct SettingsView: View {
     @State private var newModeCommand = ""
 
     @State private var showingAddAgent = false
+    @State private var editingAgentIndex: Int? = nil
 
     init(model: LauncherModel, initialTab: SettingsTab = .general, initialAdd: Bool = false) {
         self.model = model
@@ -158,6 +159,14 @@ struct SettingsView: View {
                     LabeledContent {
                         HStack(spacing: 8) {
                             Button {
+                                editingAgentIndex = index
+                                showingAddAgent = true
+                            } label: {
+                                Image(systemName: "pencil")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Edit agent")
+                            Button {
                                 draft.defaultAgent = (draft.defaultAgent == draft.agents[index].alias)
                                     ? nil : draft.agents[index].alias
                                 persist()
@@ -185,6 +194,7 @@ struct SettingsView: View {
                     }
                 }
                 Button {
+                    editingAgentIndex = nil
                     showingAddAgent = true
                 } label: {
                     Label("Add Agent…", systemImage: "plus")
@@ -199,19 +209,45 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .sheet(isPresented: $showingAddAgent) {
-            AddAgentSheet(takenAliases: Set(draft.agents.map(\.alias))) { agent in
-                draft.agents.append(agent)
-                if draft.defaultAgent == nil { draft.defaultAgent = agent.alias }
-                persist()
+            if let index = editingAgentIndex {
+                let current = draft.agents[index]
+                AgentFormSheet(existing: current,
+                               takenAliases: Set(draft.agents.map(\.alias)).subtracting([current.alias])) { updated in
+                    let oldAlias = current.alias
+                    draft.agents[index] = updated
+                    if draft.defaultAgent == oldAlias { draft.defaultAgent = updated.alias }
+                    persist()
+                }
+            } else {
+                AgentFormSheet(existing: nil,
+                               takenAliases: Set(draft.agents.map(\.alias))) { agent in
+                    draft.agents.append(agent)
+                    if draft.defaultAgent == nil { draft.defaultAgent = agent.alias }
+                    persist()
+                }
             }
         }
     }
 
-    /// Focused add-agent dialog: label above each bordered field so it's obvious
-    /// what goes where. Enter adds, Escape cancels.
-    struct AddAgentSheet: View {
+    /// Focused agent dialog (add + edit): label above each bordered field so
+    /// it's obvious what goes where. Enter saves, Escape cancels. The stored
+    /// API key is kept unless a new one is typed.
+    struct AgentFormSheet: View {
+    let existing: AgentConfig?
     var takenAliases: Set<String>
-    var onAdd: (AgentConfig) -> Void
+    var onSave: (AgentConfig) -> Void
+
+    init(existing: AgentConfig? = nil, takenAliases: Set<String>,
+         onSave: @escaping (AgentConfig) -> Void) {
+        self.existing = existing
+        self.takenAliases = takenAliases
+        self.onSave = onSave
+        _name = State(initialValue: existing?.name ?? "")
+        _alias = State(initialValue: existing?.alias ?? "")
+        _type = State(initialValue: existing?.type ?? "openai")
+        _baseURL = State(initialValue: existing?.baseURL ?? "")
+        _modelOrTool = State(initialValue: existing?.model ?? existing?.tool ?? "")
+    }
 
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""
@@ -249,7 +285,7 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Add Agent").font(.headline)
+            Text(existing == nil ? "Add Agent" : "Edit Agent").font(.headline)
 
             field("Name") {
                 TextField("e.g. Hermes", text: $name)
@@ -288,7 +324,8 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
             }
             field("API Key") {
-                SecureField("Bearer token", text: $apiKey)
+                SecureField(existing?.apiKey != nil ? "Saved — leave empty to keep it" : "Bearer token",
+                            text: $apiKey)
                     .textFieldStyle(.roundedBorder)
             }
 
@@ -299,17 +336,19 @@ struct SettingsView: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Add") {
+                Button(existing == nil ? "Add" : "Save") {
                     var base = baseURL.trimmingCharacters(in: .whitespaces)
                     if type == "anthropic", base.isEmpty { base = "https://api.anthropic.com" }
-                    onAdd(AgentConfig(
+                    onSave(AgentConfig(
                         name: name.trimmingCharacters(in: .whitespaces),
                         alias: aliasClean,
                         type: type,
                         baseURL: base,
                         model: (type == "mcp" || modelOrTool.isEmpty) ? nil : modelOrTool,
                         tool: (type == "mcp" && !modelOrTool.isEmpty) ? modelOrTool : nil,
-                        apiKey: apiKey.isEmpty ? nil : apiKey))
+                        // Empty key field keeps the stored one (masked fields
+                        // can't echo secrets back).
+                        apiKey: apiKey.isEmpty ? existing?.apiKey : apiKey))
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
