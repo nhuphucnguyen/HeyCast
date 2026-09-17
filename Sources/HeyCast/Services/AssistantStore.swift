@@ -16,6 +16,7 @@ struct AssistantMessage: Identifiable, Equatable {
     let createdAt: Date
     var doneAt: Date?
     var viewedAt: Date?
+    var imageData: Data?   // screenshot attached to the request, if any
 
     var isUnread: Bool { status != .pending && viewedAt == nil }
 }
@@ -44,10 +45,12 @@ final class AssistantStore {
             status TEXT NOT NULL CHECK(status IN ('pending','done','failed')),
             created_at INTEGER NOT NULL,
             done_at INTEGER,
-            viewed_at INTEGER
+            viewed_at INTEGER,
+            image_data BLOB
         );
         CREATE INDEX IF NOT EXISTS idx_assistant_created ON assistant_messages(created_at DESC);
         """)
+        _ = execute("ALTER TABLE assistant_messages ADD COLUMN image_data BLOB")
     }
 
     deinit {
@@ -59,19 +62,27 @@ final class AssistantStore {
         return sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK
     }
 
-    func insert(agent: String, request: String) -> Int64? {
+    func insert(agent: String, request: String, imageData: Data?) -> Int64? {
         var rowID: Int64?
         queue.sync { [weak self] in
             guard let self, let db = self.db else { return }
             var stmt: OpaquePointer?
             let sql = """
-            INSERT INTO assistant_messages (agent, request, status, created_at) VALUES (?,?, 'pending', ?)
+            INSERT INTO assistant_messages (agent, request, status, created_at, image_data)
+            VALUES (?,?, 'pending', ?, ?)
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
             sqlite3_bind_text(stmt, 1, agent, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(stmt, 2, request, -1, SQLITE_TRANSIENT)
             sqlite3_bind_int64(stmt, 3, Int64(Date().timeIntervalSince1970 * 1000))
+            if let imageData {
+                _ = imageData.withUnsafeBytes { buf in
+                    sqlite3_bind_blob(stmt, 4, buf.baseAddress, Int32(buf.count), SQLITE_TRANSIENT)
+                }
+            } else {
+                sqlite3_bind_null(stmt, 4)
+            }
             if sqlite3_step(stmt) == SQLITE_DONE {
                 rowID = sqlite3_last_insert_rowid(db)
             }
@@ -134,7 +145,7 @@ final class AssistantStore {
             guard let self, let db = self.db else { return [] }
             var stmt: OpaquePointer?
             let sql = """
-            SELECT id, agent, request, response, error, status, created_at, done_at, viewed_at
+            SELECT id, agent, request, response, error, status, created_at, done_at, viewed_at, image_data
             FROM assistant_messages ORDER BY created_at DESC LIMIT ?
             """
             guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
@@ -154,9 +165,13 @@ final class AssistantStore {
                     ? nil : Date(timeIntervalSince1970: Double(sqlite3_column_int64(stmt, 7)) / 1000)
                 let viewedAt = sqlite3_column_type(stmt, 8) == SQLITE_NULL
                     ? nil : Date(timeIntervalSince1970: Double(sqlite3_column_int64(stmt, 8)) / 1000)
+                var imageData: Data? = nil
+                if let blob = sqlite3_column_blob(stmt, 9) {
+                    imageData = Data(bytes: blob, count: Int(sqlite3_column_bytes(stmt, 9)))
+                }
                 messages.append(AssistantMessage(id: id, agent: agent, request: request, response: response,
                                                  error: error, status: status, createdAt: created,
-                                                 doneAt: doneAt, viewedAt: viewedAt))
+                                                 doneAt: doneAt, viewedAt: viewedAt, imageData: imageData))
             }
             return messages
         }

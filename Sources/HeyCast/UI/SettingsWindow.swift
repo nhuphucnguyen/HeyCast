@@ -263,6 +263,8 @@ struct SettingsView: View {
         _type = State(initialValue: existing?.type ?? "openai")
         _baseURL = State(initialValue: existing?.baseURL ?? "")
         _modelOrTool = State(initialValue: existing?.model ?? existing?.tool ?? "")
+        _visionModel = State(initialValue: existing?.visionModel ?? "")
+        _visionBaseURL = State(initialValue: existing?.visionBaseURL ?? "")
     }
 
     @Environment(\.dismiss) private var dismiss
@@ -272,6 +274,8 @@ struct SettingsView: View {
     @State private var baseURL = ""
     @State private var modelOrTool = ""
     @State private var apiKey = ""
+    @State private var visionModel = ""
+    @State private var visionBaseURL = ""
     @FocusState private var nameFocused: Bool
 
     private var aliasClean: String {
@@ -351,6 +355,14 @@ struct SettingsView: View {
                             text: $apiKey)
                     .textFieldStyle(.roundedBorder)
             }
+            field("Vision model — optional, used when a screenshot is attached") {
+                TextField("e.g. glm-4.6v, gpt-4o (must support images)", text: $visionModel)
+                    .textFieldStyle(.roundedBorder)
+            }
+            field("Vision base URL — optional, if vision lives on another endpoint") {
+                TextField("e.g. https://api.z.ai/api/paas/v4", text: $visionBaseURL)
+                    .textFieldStyle(.roundedBorder)
+            }
 
             HStack {
                 if let problem {
@@ -371,7 +383,9 @@ struct SettingsView: View {
                         tool: (type == "mcp" && !modelOrTool.isEmpty) ? modelOrTool : nil,
                         // Empty key field keeps the stored one (masked fields
                         // can't echo secrets back).
-                        apiKey: apiKey.isEmpty ? existing?.apiKey : apiKey))
+                        apiKey: apiKey.isEmpty ? existing?.apiKey : apiKey,
+                        visionModel: visionModel.isEmpty ? existing?.visionModel : visionModel,
+                        visionBaseURL: visionBaseURL.isEmpty ? existing?.visionBaseURL : visionBaseURL))
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
