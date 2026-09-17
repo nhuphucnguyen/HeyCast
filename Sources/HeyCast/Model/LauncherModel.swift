@@ -901,7 +901,11 @@ final class LauncherModel: ObservableObject {
         case .clipboard:
             return NSSize(width: Self.clipboardWindowWidth, height: 480)
         case .assistant:
-            return NSSize(width: Self.clipboardWindowWidth, height: 480)
+            // Reading page: use generous horizontal space (60% of the screen,
+            // clamped) so long responses stay readable.
+            let screenWidth = NSScreen.main?.visibleFrame.width ?? 1280
+            let width = min(1080, max(Self.clipboardWindowWidth, screenWidth * 0.6))
+            return NSSize(width: width, height: 500)
         }
     }
 

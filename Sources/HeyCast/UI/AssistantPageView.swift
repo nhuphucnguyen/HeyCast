@@ -50,7 +50,7 @@ struct AssistantPageView: View {
                     }
                 }
             }
-            .frame(width: 250)
+            .frame(width: 280)
 
             Divider()
                 .overlay(model.theme.textColor.alpha(0.15))
