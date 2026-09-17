@@ -36,13 +36,33 @@ struct ShellCommandConfig: Codable, Equatable {
 /// streamable-HTTP server works. API keys live in config.json for now
 /// (Keychain hardening is a planned follow-up).
 struct AgentConfig: Codable, Equatable {
-    var name: String                    // display name, e.g. "Hermes"
-    var alias: String                   // "@alias question" routing prefix
+    var name: String = ""               // display name, e.g. "Hermes"
+    var alias: String = ""              // "@alias question" routing prefix
     var type: String = "openai"         // openai | anthropic | mcp
-    var baseURL: String                 // openai: incl. /v1; mcp: endpoint URL
+    var baseURL: String = ""            // openai: incl. /v1; mcp: endpoint URL
     var model: String? = nil            // openai/anthropic model id
     var tool: String? = nil             // mcp: tool to call (else first listed)
     var apiKey: String? = nil           // Bearer / x-api-key; oauth: phase 2
+    var visionModel: String? = nil      // used when a screenshot is attached
+    var visionBaseURL: String? = nil    // e.g. z.ai vision lives on the general endpoint
+}
+
+// Tolerant decoding (see notes on Config) lives in an extension so the
+// memberwise initializer keeps working for call sites that build agents.
+extension AgentConfig {
+    init(from decoder: Decoder) throws {
+        self.init()
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        if let v = try c.decodeIfPresent(String.self, forKey: .name) { name = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .alias) { alias = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .type) { type = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .baseURL) { baseURL = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .model) { model = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .tool) { tool = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .apiKey) { apiKey = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .visionModel) { visionModel = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .visionBaseURL) { visionBaseURL = v }
+    }
 }
 
 struct ThemeConfig: Codable {

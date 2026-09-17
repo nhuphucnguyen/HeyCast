@@ -143,4 +143,42 @@ final class ClipboardService {
         keyDown.postToPid(pid)
         keyUp.postToPid(pid)
     }
+
+    private static let pasteboard = NSPasteboard.general
+
+    /// True when the system clipboard currently holds an image.
+    static var clipboardHasImage: Bool {
+        pasteboard.types?.contains { $0 == .png || $0 == .tiff } ?? false
+    }
+
+    /// The clipboard image as PNG (screenshots land as TIFF or PNG), long
+    /// edge downscaled to 2000px so requests stay a sane size.
+    static func clipboardImagePNG() -> Data? {
+        var data = pasteboard.data(forType: .png)
+        if data == nil, let tiff = pasteboard.data(forType: .tiff) {
+            data = tiff
+        }
+        guard var data, let image = NSImage(data: data) else { return nil }
+
+        let longest = max(image.size.width, image.size.height)
+        if longest > 2000 {
+            let scale = 2000 / longest
+            let newSize = NSSize(width: (image.size.width * scale).rounded(),
+                                 height: (image.size.height * scale).rounded())
+            guard let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(newSize.width), pixelsHigh: Int(newSize.height),
+                bitsPerSample: 8, samplesPerPixel: 4,
+                hasAlpha: true, isPlanar: false,
+                colorSpaceName: .calibratedRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return data }
+            rep.size = newSize
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            image.draw(in: NSRect(origin: .zero, size: newSize),
+                       from: .zero, operation: .copy, fraction: 1.0)
+            NSGraphicsContext.restoreGraphicsState()
+            data = rep.representation(using: .png, properties: [:]) ?? data
+        }
+        return data
+    }
 }

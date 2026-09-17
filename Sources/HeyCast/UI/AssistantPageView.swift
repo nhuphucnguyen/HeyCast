@@ -76,6 +76,20 @@ struct AssistantPageView: View {
                             .foregroundStyle(model.theme.textColor.alpha(0.8))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
+                        if let imageData = message.imageData, let image = NSImage(data: imageData) {
+                            Image(nsImage: image)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(maxHeight: 160)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(model.theme.textColor.alpha(0.15), lineWidth: 1)
+                                )
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .help("Screenshot attached to this request")
+                        }
+
                         Divider().overlay(model.theme.textColor.alpha(0.15))
 
                         switch message.status {

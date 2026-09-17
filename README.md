@@ -44,6 +44,10 @@ pure Apple frameworks so every feature leans on the platform directly.
     notification, waiting in the inbox (unread dot + badge on the menu
     bar icon) until you read it
   - `heycast://ask?text=…&agent=alias` does the same from scripts
+  - copy a screenshot and the next agent request attaches it
+    automatically (vision models only — configure an optional vision
+    model + base URL per agent, e.g. z.ai's text coding endpoint vs
+    its vision endpoint on `https://api.z.ai/api/paas/v4`)
   - failed requests get a Retry button
 
   ```json

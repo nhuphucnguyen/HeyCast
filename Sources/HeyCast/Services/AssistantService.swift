@@ -17,8 +17,11 @@ final class AssistantService {
     func send(agent: AgentConfig, text: String) -> Int64? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        guard let id = store.insert(agent: agent.name, request: trimmed) else { return nil }
-        dispatch(agent: agent, id: id, text: trimmed)
+        // A screenshot on the clipboard rides along automatically — the
+        // "screenshot → @glm extract the text" flow.
+        let image = ClipboardService.clipboardImagePNG()
+        guard let id = store.insert(agent: agent.name, request: trimmed, imageData: image) else { return nil }
+        dispatch(agent: agent, id: id, text: trimmed, imageData: image)
         onUpdated?()
         return id
     }
@@ -27,16 +30,16 @@ final class AssistantService {
         // Prefer the current config for the alias, so a fixed URL/key applies.
         let resolved = agent ?? AgentConfig(name: message.agent, alias: "", type: "openai", baseURL: "")
         store.reset(id: message.id)
-        dispatch(agent: resolved, id: message.id, text: message.request)
+        dispatch(agent: resolved, id: message.id, text: message.request, imageData: message.imageData)
         onUpdated?()
     }
 
-    private func dispatch(agent: AgentConfig, id: Int64, text: String) {
+    private func dispatch(agent: AgentConfig, id: Int64, text: String, imageData: Data?) {
         inFlight.insert(id)
         Task { [weak self] in
             guard let self else { return }
             do {
-                let response = try await Self.perform(agent: agent, question: text) { [weak self] delta in
+                let response = try await Self.perform(agent: agent, question: text, imageData: imageData) { [weak self] delta in
                     self?.streamDelta(id: id, delta: delta)
                 }
                 self.store.updateResponse(id: id, response: response)
@@ -75,12 +78,12 @@ final class AssistantService {
 
     // MARK: - agents
 
-    static func perform(agent: AgentConfig, question: String,
+    static func perform(agent: AgentConfig, question: String, imageData: Data?,
                         onDelta: @escaping (String) -> Void) async throws -> String {
         switch agent.type.lowercased() {
-        case "anthropic": return try await callAnthropic(agent: agent, question: question, onDelta: onDelta)
+        case "anthropic": return try await callAnthropic(agent: agent, question: question, imageData: imageData, onDelta: onDelta)
         case "mcp": return try await callMCP(agent: agent, question: question)
-        default: return try await callOpenAI(agent: agent, question: question, onDelta: onDelta)
+        default: return try await callOpenAI(agent: agent, question: question, imageData: imageData, onDelta: onDelta)
         }
     }
 
@@ -90,17 +93,35 @@ final class AssistantService {
     /// falls back to parsing a plain JSON body if the provider ignores
     /// stream:true.
     private static func callOpenAI(agent: AgentConfig, question: String,
-                                   onDelta: @escaping (String) -> Void) async throws -> String {
-        var request = URLRequest(url: URL(string: agent.baseURL + "/chat/completions")!)
+                                   imageData: Data?, onDelta: @escaping (String) -> Void) async throws -> String {
+        // Image requests may target a vision-specific model/endpoint (e.g.
+        // z.ai's coding endpoint is text-only; vision lives on the general
+        // endpoint with a vision model like glm-4.6v).
+        var endpoint = agent.baseURL
+        var model = agent.model ?? "gpt-4o-mini"
+        if imageData != nil {
+            if let visionBase = agent.visionBaseURL, !visionBase.isEmpty { endpoint = visionBase }
+            if let visionModel = agent.visionModel, !visionModel.isEmpty { model = visionModel }
+        }
+        var request = URLRequest(url: URL(string: endpoint + "/chat/completions")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key = agent.apiKey, !key.isEmpty {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         }
+        var userContent: Any = question
+        if let imageData {
+            // Multimodal: text + image part (base64 data URI).
+            userContent = [
+                ["type": "text", "text": question],
+                ["type": "image_url", "image_url":
+                    ["url": "data:image/png;base64,\(imageData.base64EncodedString())"]],
+            ]
+        }
         let body: [String: Any] = [
-            "model": agent.model ?? "gpt-4o-mini",
-            "messages": [["role": "user", "content": question]],
+            "model": model,
+            "messages": [["role": "user", "content": userContent]],
             "stream": true,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -145,13 +166,13 @@ final class AssistantService {
             }
         }
         throw NSError(domain: "assistant", code: 1,
-                      userInfo: [NSLocalizedDescriptionKey: "Unexpected response from \(agent.baseURL)"])
+                      userInfo: [NSLocalizedDescriptionKey: "Unexpected response from \(endpoint)"])
     }
 
     /// Anthropic Messages API. baseURL defaults to https://api.anthropic.com.
     /// Streams content_block_delta text events.
     private static func callAnthropic(agent: AgentConfig, question: String,
-                                      onDelta: @escaping (String) -> Void) async throws -> String {
+                                      imageData: Data?, onDelta: @escaping (String) -> Void) async throws -> String {
         var base = agent.baseURL
         if base.isEmpty { base = "https://api.anthropic.com" }
         var request = URLRequest(url: URL(string: base + "/v1/messages")!)
@@ -162,10 +183,19 @@ final class AssistantService {
             request.setValue(key, forHTTPHeaderField: "x-api-key")
         }
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        var userContent: Any = question
+        if let imageData {
+            userContent = [
+                ["type": "image", "source": [
+                    "type": "base64", "media_type": "image/png",
+                    "data": imageData.base64EncodedString()]],
+                ["type": "text", "text": question],
+            ]
+        }
         let body: [String: Any] = [
             "model": agent.model ?? "claude-sonnet-4-5",
             "max_tokens": 2048,
-            "messages": [["role": "user", "content": question]],
+            "messages": [["role": "user", "content": userContent]],
             "stream": true,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
