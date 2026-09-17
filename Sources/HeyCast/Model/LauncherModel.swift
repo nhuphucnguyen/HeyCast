@@ -139,6 +139,9 @@ final class LauncherModel: ObservableObject {
     func escPressed() {
         if !query.isEmpty {
             query = ""
+        } else if page == .assistant {
+            // From the inbox/loading view, Esc means "back to work".
+            hide()
         } else if page != .main {
             switchPage(.main)
         } else {
@@ -755,35 +758,43 @@ final class LauncherModel: ObservableObject {
     }
 
     @discardableResult
-    func sendToAgent(alias: String, text: String) -> Bool {
+    func sendToAgent(alias: String, text: String, showLoading: Bool = true) -> Bool {
         guard let agent = agent(forAlias: alias) else { return false }
-        assistantService.send(agent: agent, text: text)
+        let id = assistantService.send(agent: agent, text: text)
         assistantUpdated()
+        if showLoading { presentPendingAssistant(id) }
         return true
     }
 
-    /// ⌘↵ in the main bar and Enter on the assistant page.
-    func sendToDefaultAgent(_ text: String) {
+    /// ⌘↵ in the main bar and Enter on the assistant page. Interactive sends
+    /// flip to the Assistant page with a spinner so the send visibly worked;
+    /// Esc there dismisses the panel back to work.
+    func sendToDefaultAgent(_ text: String, showLoading: Bool = true) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let agent = config.agents.first { $0.alias == config.defaultAgent } ?? config.agents.first
         guard let agent else { return }
-        assistantService.send(agent: agent, text: trimmed)
+        let id = assistantService.send(agent: agent, text: trimmed)
         assistantUpdated()
         query = ""
-        hide()
+        if showLoading { presentPendingAssistant(id) }
+    }
+
+    /// The "loading screen": the Assistant inbox with the new pending
+    /// request selected (spinner in the detail pane). The response replaces
+    /// the spinner when it lands — even if the panel was dismissed meanwhile.
+    private func presentPendingAssistant(_ id: Int64?) {
+        show(to: .assistant)
+        if let id { selectedAssistantID = id }
     }
 
     /// Main-bar entry point: an "@alias question" sends immediately (the
-    /// panel hides and the answer lands in the inbox + a notification).
+    /// panel switches to the loading view; Esc returns to work).
     /// "@alias " with no question yet keeps the panel open for typing.
     func handleMainSubmit() {
         if let request = agentRequest(in: query) {
             guard !request.text.isEmpty else { return }
-            assistantService.send(agent: request.agent, text: request.text)
-            assistantUpdated()
-            query = ""
-            hide()
+            sendToAgent(alias: request.agent.alias, text: request.text)
         } else {
             openFocused()
         }

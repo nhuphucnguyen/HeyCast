@@ -112,15 +112,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // "@alias question" on the main page too).
             model.handleMainSubmit()
         case "ask":
-            // Fire-and-forget: heycast://ask?text=...&agent=alias
+            // Fire-and-forget: heycast://ask?text=...&agent=alias (silent —
+            // no panel pop-up; the answer lands in the inbox + notification)
             let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
             let text = params.first(where: { $0.name == "text" })?.value?.removingPercentEncoding
             let agentAlias = params.first(where: { $0.name == "agent" })?.value?.removingPercentEncoding
             guard let text, !text.isEmpty else { break }
             if let agentAlias {
-                model.sendToAgent(alias: agentAlias, text: text)
+                model.sendToAgent(alias: agentAlias, text: text, showLoading: false)
             } else {
-                model.sendToDefaultAgent(text)
+                model.sendToDefaultAgent(text, showLoading: false)
             }
         case "esc":
             model.escPressed()
