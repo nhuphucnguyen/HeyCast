@@ -80,7 +80,9 @@ final class LauncherModel: ObservableObject {
             guard let self, self.page == .main else { return }
             self.refreshResults()
         }
-        calendarService.requestAccess()
+        // Calendar access is NOT requested here — the system prompt only
+        // appears when the user actually opens the Events page (see
+        // emptyQueryResults).
         applyHotkeys()
         if config.mainPage == .events {
             refreshResults()
@@ -306,6 +308,12 @@ final class LauncherModel: ObservableObject {
                 .map { self.result(for: $0) }
             return ranked
         case .events:
+            // The calendar permission prompt fires here — the first time the
+            // user actually engages the Events page — and the list refreshes
+            // once they grant access.
+            calendarService.requestAccess { [weak self] in
+                self?.refreshResults()
+            }
             let events = calendarService.upcomingEvents(withinMinutes: config.eventDurationMinutes)
             return events.map { event in
                 ResultItem(id: "event-\(event.id)",

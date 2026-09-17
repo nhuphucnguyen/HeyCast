@@ -17,8 +17,16 @@ final class CalendarService {
 
     private let store = EKEventStore()
     private var authorized = false
+    /// True once we've asked the system (the ask itself is deferred until
+    /// the user actually opens the Events page, so first launch is prompt-free).
+    private(set) var accessRequested = false
 
     func requestAccess(completion: (() -> Void)? = nil) {
+        guard !accessRequested else {
+            completion?()
+            return
+        }
+        accessRequested = true
         let finish: (Bool) -> Void = { [weak self] granted in
             DispatchQueue.main.async {
                 self?.authorized = granted
