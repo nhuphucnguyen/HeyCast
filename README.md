@@ -39,9 +39,10 @@ pure Apple frameworks so every feature leans on the platform directly.
   streamable-HTTP server) in Settings → Assistant, then:
   - `@alias your question` + Enter from anywhere, or ⌘↵ for the default
     agent, or type + Enter on the Assistant page
-  - the panel dismisses immediately; when the answer lands you get a
-    macOS notification, and the response waits in the Assistant inbox
-    (unread dot + badge on the menu bar icon) until you read it
+  - the panel switches to the Assistant page and the response streams
+    in live; leave with Esc and the answer still arrives as a macOS
+    notification, waiting in the inbox (unread dot + badge on the menu
+    bar icon) until you read it
   - `heycast://ask?text=…&agent=alias` does the same from scripts
   - failed requests get a Retry button
 

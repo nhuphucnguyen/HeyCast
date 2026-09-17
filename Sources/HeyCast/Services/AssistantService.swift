@@ -36,12 +36,18 @@ final class AssistantService {
         Task { [weak self] in
             guard let self else { return }
             do {
-                let response = try await Self.perform(agent: agent, question: text)
+                let response = try await Self.perform(agent: agent, question: text) { [weak self] delta in
+                    self?.streamDelta(id: id, delta: delta)
+                }
                 self.store.updateResponse(id: id, response: response)
+                self.streamBuffers[id] = nil
+                self.lastStreamFlush[id] = nil
                 NotificationService.shared.post(title: "\(agent.name) responded",
                                                 body: String(response.prefix(120)), messageID: id)
             } catch {
                 self.store.updateError(id: id, error: error.localizedDescription)
+                self.streamBuffers[id] = nil
+                self.lastStreamFlush[id] = nil
                 NotificationService.shared.post(title: "\(agent.name) failed",
                                                 body: String(error.localizedDescription.prefix(120)),
                                                 messageID: id)
@@ -51,20 +57,40 @@ final class AssistantService {
         }
     }
 
+    // MARK: - streaming
+
+    private var streamBuffers: [Int64: String] = [:]
+    private var lastStreamFlush: [Int64: Date] = [:]
+
+    /// Called for every streamed chunk. UI/store writes are throttled —
+    /// providers emit far faster than anyone needs to re-render.
+    private func streamDelta(id: Int64, delta: String) {
+        let now = Date()
+        streamBuffers[id, default: ""] += delta
+        if let last = lastStreamFlush[id], now.timeIntervalSince(last) < 0.12 { return }
+        lastStreamFlush[id] = now
+        store.updatePartial(id: id, response: streamBuffers[id] ?? "")
+        onUpdated?()
+    }
+
     // MARK: - agents
 
-    static func perform(agent: AgentConfig, question: String) async throws -> String {
+    static func perform(agent: AgentConfig, question: String,
+                        onDelta: @escaping (String) -> Void) async throws -> String {
         switch agent.type.lowercased() {
-        case "anthropic": return try await callAnthropic(agent: agent, question: question)
+        case "anthropic": return try await callAnthropic(agent: agent, question: question, onDelta: onDelta)
         case "mcp": return try await callMCP(agent: agent, question: question)
-        default: return try await callOpenAI(agent: agent, question: question)
+        default: return try await callOpenAI(agent: agent, question: question, onDelta: onDelta)
         }
     }
 
     /// OpenAI-compatible chat endpoint (OpenAI, Groq, Ollama, OpenRouter,
-    /// most self-hosted agents). baseURL includes the version path, e.g.
-    /// https://api.openai.com/v1.
-    private static func callOpenAI(agent: AgentConfig, question: String) async throws -> String {
+    /// z.ai, most self-hosted agents). baseURL includes the version path,
+    /// e.g. https://api.openai.com/v1. Streams SSE deltas as they arrive;
+    /// falls back to parsing a plain JSON body if the provider ignores
+    /// stream:true.
+    private static func callOpenAI(agent: AgentConfig, question: String,
+                                   onDelta: @escaping (String) -> Void) async throws -> String {
         var request = URLRequest(url: URL(string: agent.baseURL + "/chat/completions")!)
         request.httpMethod = "POST"
         request.timeoutInterval = 120
@@ -75,26 +101,57 @@ final class AssistantService {
         let body: [String: Any] = [
             "model": agent.model ?? "gpt-4o-mini",
             "messages": [["role": "user", "content": question]],
+            "stream": true,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-        if let choices = json["choices"] as? [[String: Any]],
-           let message = choices.first?["message"] as? [String: Any],
-           let content = message["content"] as? String, !content.isEmpty {
-            return content
+        let (bytes, _) = try await URLSession.shared.bytes(for: request)
+        var full = ""
+        var sawStream = false
+        var rawBody = ""
+
+        for try await line in bytes.lines {
+            rawBody += line + "\n"
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            if payload == "[DONE]" { break }
+            guard let data = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
+                throw NSError(domain: "assistant", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
+            if let choices = json["choices"] as? [[String: Any]],
+               let delta = choices.first?["delta"] as? [String: Any],
+               let piece = delta["content"] as? String, !piece.isEmpty {
+                sawStream = true
+                full += piece
+                // The loop runs off the main actor; stream buffers live on it.
+                await MainActor.run { onDelta(piece) }
+            }
         }
-        if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
-            throw NSError(domain: "assistant", code: 1,
-                          userInfo: [NSLocalizedDescriptionKey: message])
+        if sawStream { return full }
+
+        // Fallback: the provider ignored stream:true and answered in one body.
+        if let json = try? JSONSerialization.jsonObject(with: Data(rawBody.utf8)) as? [String: Any] {
+            if let choices = json["choices"] as? [[String: Any]],
+               let message = choices.first?["message"] as? [String: Any],
+               let content = message["content"] as? String, !content.isEmpty {
+                return content
+            }
+            if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
+                throw NSError(domain: "assistant", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
         }
         throw NSError(domain: "assistant", code: 1,
                       userInfo: [NSLocalizedDescriptionKey: "Unexpected response from \(agent.baseURL)"])
     }
 
     /// Anthropic Messages API. baseURL defaults to https://api.anthropic.com.
-    private static func callAnthropic(agent: AgentConfig, question: String) async throws -> String {
+    /// Streams content_block_delta text events.
+    private static func callAnthropic(agent: AgentConfig, question: String,
+                                      onDelta: @escaping (String) -> Void) async throws -> String {
         var base = agent.baseURL
         if base.isEmpty { base = "https://api.anthropic.com" }
         var request = URLRequest(url: URL(string: base + "/v1/messages")!)
@@ -109,18 +166,46 @@ final class AssistantService {
             "model": agent.model ?? "claude-sonnet-4-5",
             "max_tokens": 2048,
             "messages": [["role": "user", "content": question]],
+            "stream": true,
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-        if let content = json["content"] as? [[String: Any]] {
-            let text = content.compactMap { $0["text"] as? String }.joined()
-            if !text.isEmpty { return text }
+        let (bytes, _) = try await URLSession.shared.bytes(for: request)
+        var full = ""
+        var sawStream = false
+        var rawBody = ""
+
+        for try await line in bytes.lines {
+            rawBody += line + "\n"
+            guard line.hasPrefix("data:") else { continue }
+            let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+            guard let data = payload.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if json["type"] as? String == "content_block_delta" {
+                if let delta = json["delta"] as? [String: Any],
+                   let piece = delta["text"] as? String, !piece.isEmpty {
+                    sawStream = true
+                    full += piece
+                    // The loop runs off the main actor; stream buffers live on it.
+                    await MainActor.run { onDelta(piece) }
+                }
+            } else if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
+                throw NSError(domain: "assistant", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
         }
-        if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
-            throw NSError(domain: "assistant", code: 2,
-                          userInfo: [NSLocalizedDescriptionKey: message])
+        if sawStream { return full }
+
+        // Fallback: plain JSON body.
+        if let json = try? JSONSerialization.jsonObject(with: Data(rawBody.utf8)) as? [String: Any] {
+            if let content = json["content"] as? [[String: Any]] {
+                let text = content.compactMap { $0["text"] as? String }.joined()
+                if !text.isEmpty { return text }
+            }
+            if let error = json["error"] as? [String: Any], let message = error["message"] as? String {
+                throw NSError(domain: "assistant", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: message])
+            }
         }
         throw NSError(domain: "assistant", code: 2,
                       userInfo: [NSLocalizedDescriptionKey: "Unexpected response from \(base)"])

@@ -68,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: URL scheme (heycast://show | toggle | quit | open?target=NAME)
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        NSLog("HeyCast: open URLs called: \(urls)")
+        NSLog("%@", "HeyCast: open URLs called: \(urls)")
         guard model != nil else {
             pendingURLs.append(contentsOf: urls)
             return
@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleURLScheme(_ url: URL) {
         let host = url.host?.lowercased() ?? url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        NSLog("HeyCast: URL scheme action '\(host)'")
+        NSLog("%@", "HeyCast: URL scheme action '\(host)'")
         switch host {
         case "show":
             if !model.panelIsVisible { model.show() }

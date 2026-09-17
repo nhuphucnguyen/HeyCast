@@ -39,7 +39,7 @@ final class ClipboardStore {
         let url = Config.directory.appendingPathComponent("clipboard.db")
         try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
         guard sqlite3_open(url.path, &db) == SQLITE_OK else {
-            NSLog("HeyCast: failed to open clipboard db at \(url.path)")
+            NSLog("%@", "HeyCast: failed to open clipboard db at \(url.path)")
             db = nil
             return
         }
