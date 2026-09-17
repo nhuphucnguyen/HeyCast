@@ -108,8 +108,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.toggleClipboardPin(model.filteredClipboardItems[model.selectedIndex])
             }
         case "enter":
-            // Same as pressing return on the highlighted row.
-            model.openFocused()
+            // Same as pressing return on the highlighted row (routes
+            // "@alias question" on the main page too).
+            model.handleMainSubmit()
         case "ask":
             // Fire-and-forget: heycast://ask?text=...&agent=alias
             let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []

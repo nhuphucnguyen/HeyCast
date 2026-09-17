@@ -174,6 +174,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             if cmd, page == .main {
                 // ⌘↵ sends the query to the default agent (fire-and-forget).
                 model.sendToDefaultAgent(model.query)
+            } else if page == .main {
+                // handleMainSubmit routes "@alias question" to the agent;
+                // anything else opens the highlighted result.
+                model.handleMainSubmit()
             } else {
                 model.openFocused()
             }

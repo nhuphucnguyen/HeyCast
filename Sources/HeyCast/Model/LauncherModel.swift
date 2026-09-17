@@ -266,6 +266,18 @@ final class LauncherModel: ObservableObject {
             results = emptyQueryResults()
         } else {
             results = searchResults(for: query)
+            // "@alias question" gets a first-class row so the destination is
+            // visible before you hit Enter.
+            if let request = agentRequest(in: query) {
+                results.insert(ResultItem(
+                    id: "ask-agent",
+                    title: "Ask \(request.agent.name): \(request.text)",
+                    subtitle: "Assistant — the response arrives in your inbox",
+                    icon: .symbol("sparkles"),
+                    searchName: nil,
+                    action: .askAgent(alias: request.agent.alias, text: request.text)),
+                    at: 0)
+            }
         }
         if !results.indices.contains(selectedIndex) { selectedIndex = 0 }
         onLayoutChanged?()
@@ -532,6 +544,10 @@ final class LauncherModel: ObservableObject {
             NSWorkspace.shared.open(url)
             ranking.bump(searchName)
             afterOpen(searchName: searchName, hideWindow: true)
+
+        case let .askAgent(alias, text):
+            sendToAgent(alias: alias, text: text)
+            afterOpen(searchName: nil, hideWindow: true)
 
         case .openURL(let url):
             NSWorkspace.shared.open(url)
