@@ -1,165 +1,115 @@
 import SwiftUI
+import MarkdownUI
 
-/// Minimal markdown renderer for agent responses. Block structure
-/// (headings, lists, fenced code, quotes, rules) is parsed here; inline
-/// bold/italic/code/links go through AttributedString's markdown parser.
+/// Renders agent responses with MarkdownUI (GFM: tables, task lists, code
+/// blocks), themed to HeyCast's palette.
 struct MarkdownView: View {
     let text: String
     let theme: Theme
 
-    enum Block {
-        case paragraph(String)
-        case heading(level: Int, text: String)
-        case listItem(marker: String, text: String)
-        case code(String)
-        case quote(String)
-        case rule
-    }
-
     var body: some View {
-        let blocks = Self.parse(text)
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                blockView(block)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        Markdown(text)
+            .markdownTheme(Theme.heycastMarkdown(theme))
+            .textSelection(.enabled)
     }
+}
 
-    @ViewBuilder
-    private func blockView(_ block: Block) -> some View {
-        switch block {
-        case .paragraph(let text):
-            inline(text, size: 14)
-        case .heading(let level, let text):
-            inline(text, size: level == 1 ? 17 : (level == 2 ? 15 : 14))
-                .bold()
-                .padding(.top, 2)
-        case .listItem(let marker, let text):
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(marker)
-                    .font(.system(size: 14))
-                    .foregroundStyle(theme.textColor.alpha(0.55))
-                inline(text, size: 14)
+// `Theme` here is HeyCast's palette struct; MarkdownUI also exports a type
+// named Theme, so the factory returns MarkdownUI.Theme explicitly.
+extension Theme {
+    static func heycastMarkdown(_ t: Theme) -> MarkdownUI.Theme {
+        MarkdownUI.Theme.basic
+            .paragraph { configuration in
+                configuration.label
+                    .relativeLineSpacing(.em(0.18))
+                    .markdownTextStyle {
+                        FontSize(14)
+                        ForegroundColor(t.textColor)
+                    }
+                    .markdownMargin(top: 0, bottom: 8)
             }
-        case .code(let code):
-            Text(code)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(theme.textColor)
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(theme.secondaryBackground.alpha(0.6))
-                )
-        case .quote(let text):
-            HStack(alignment: .top, spacing: 8) {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(theme.textColor.alpha(0.25))
-                    .frame(width: 3)
-                inline(text, size: 14).italic()
+            .heading1 { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(17)
+                        ForegroundColor(t.textColor)
+                    }
+                    .markdownMargin(top: 14, bottom: 6)
             }
-        case .rule:
-            Divider().overlay(theme.textColor.alpha(0.15))
-        }
-    }
-
-    /// Renders one line of markdown inline syntax; falls back to plain text
-    /// when the input isn't valid markdown.
-    private func inline(_ string: String, size: CGFloat) -> some View {
-        Group {
-            if let attributed = try? AttributedString(
-                markdown: string,
-                options: AttributedString.MarkdownParsingOptions(
-                    interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-                Text(attributed)
-            } else {
-                Text(string)
+            .heading2 { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(15)
+                        ForegroundColor(t.textColor)
+                    }
+                    .markdownMargin(top: 12, bottom: 5)
             }
-        }
-        .font(.system(size: size))
-        .foregroundStyle(theme.textColor)
-    }
-
-    // MARK: - block parsing
-
-    static func parse(_ text: String) -> [Block] {
-        var blocks: [Block] = []
-        let lines = text.components(separatedBy: "\n")
-
-        var paragraph: [String] = []
-        func flushParagraph() {
-            guard !paragraph.isEmpty else { return }
-            blocks.append(.paragraph(paragraph.joined(separator: "\n")))
-            paragraph = []
-        }
-
-        var index = 0
-        while index < lines.count {
-            let line = lines[index]
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-
-            if trimmed.hasPrefix("```") {
-                flushParagraph()
-                var code: [String] = []
-                index += 1
-                while index < lines.count,
-                      !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("```") {
-                    code.append(lines[index])
-                    index += 1
-                }
-                index += 1 // skip the closing fence
-                blocks.append(.code(code.joined(separator: "\n")))
-                continue
+            .heading3 { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(14)
+                        ForegroundColor(t.textColor)
+                    }
+                    .markdownMargin(top: 10, bottom: 4)
             }
-            if trimmed.isEmpty {
-                flushParagraph()
-                index += 1
-                continue
+            .heading4 { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(14)
+                        ForegroundColor(t.textColor.alpha(0.9))
+                    }
+                    .markdownMargin(top: 8, bottom: 4)
             }
-            let hashes = trimmed.prefix(while: { $0 == "#" })
-            if (1...4).contains(hashes.count),
-               trimmed.dropFirst(hashes.count).first == " " {
-                flushParagraph()
-                blocks.append(.heading(level: hashes.count,
-                                       text: trimmed.dropFirst(hashes.count).trimmingCharacters(in: .whitespaces)))
-                index += 1
-                continue
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(12)
+                ForegroundColor(t.textColor)
+                BackgroundColor(t.textColor.alpha(0.12))
             }
-            if trimmed == "---" || trimmed == "***" {
-                flushParagraph()
-                blocks.append(.rule)
-                index += 1
-                continue
+            .link {
+                ForegroundColor(Color.accentColor)
             }
-            if trimmed.hasPrefix(">") {
-                flushParagraph()
-                blocks.append(.quote(trimmed.dropFirst().trimmingCharacters(in: .whitespaces)))
-                index += 1
-                continue
+            .codeBlock { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(12)
+                        ForegroundColor(t.textColor)
+                    }
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(t.secondaryBackground.alpha(0.6))
+                    )
+                    .markdownMargin(top: 4, bottom: 8)
             }
-            if trimmed.hasPrefix("- ") || trimmed.hasPrefix("* ") || trimmed.hasPrefix("• ") {
-                flushParagraph()
-                blocks.append(.listItem(marker: "•",
-                                        text: trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)))
-                index += 1
-                continue
+            .blockquote { configuration in
+                configuration.label
+                    .padding(.leading, 10)
+                    .padding(.vertical, 2)
+                    .overlay(alignment: .leading) {
+                        Rectangle()
+                            .fill(t.textColor.alpha(0.25))
+                            .frame(width: 3)
+                    }
+                    .markdownTextStyle {
+                        FontStyle(.italic)
+                        ForegroundColor(t.textColor.alpha(0.85))
+                    }
+                    .markdownMargin(top: 4, bottom: 8)
             }
-            // ordered list: "1." / "12." / "3)"
-            if trimmed.count <= 4,
-               let dotIndex = trimmed.firstIndex(where: { $0 == "." || $0 == ")" }),
-               let number = Int(trimmed[..<dotIndex]),
-               trimmed.index(after: dotIndex) < trimmed.endIndex {
-                flushParagraph()
-                let rest = trimmed[trimmed.index(after: dotIndex)...].trimmingCharacters(in: .whitespaces)
-                blocks.append(.listItem(marker: "\(number).", text: rest))
-                index += 1
-                continue
+            .listItem { configuration in
+                configuration.label
+                    .markdownMargin(top: 2, bottom: 2)
+                    .markdownTextStyle {
+                        FontSize(14)
+                        ForegroundColor(t.textColor)
+                    }
             }
-            paragraph.append(line)
-            index += 1
-        }
-        flushParagraph()
-        return blocks
     }
 }
