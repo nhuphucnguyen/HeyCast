@@ -15,7 +15,7 @@ final class SettingsWindowController {
     private var window: NSWindow?
     private weak var model: LauncherModel?
 
-    func show(model: LauncherModel, tab: SettingsTab = .general, addAgent: Bool = false) {
+    func show(model: LauncherModel, tab: SettingsTab = .general, addAgent: Bool = false, editAgentIndex: Int? = nil) {
         self.model = model
         if window == nil {
             NSLog("HeyCast: creating settings window")
@@ -35,7 +35,8 @@ final class SettingsWindowController {
         // Rebuild the view on every open so the draft reflects changes made
         // elsewhere (tray menu, edited config.json + Refresh) while closed.
         window?.contentView = NSHostingView(rootView: SettingsView(model: model, initialTab: tab,
-                                                                  initialAdd: addAgent))
+                                                                  initialAdd: addAgent,
+                                                                  initialEditIndex: editAgentIndex))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
@@ -55,14 +56,26 @@ struct SettingsView: View {
     @State private var newModeName = ""
     @State private var newModeCommand = ""
 
-    @State private var showingAddAgent = false
-    @State private var editingAgentIndex: Int? = nil
+    /// Sheet payload: index nil = add mode. item-based presentation guarantees
+    /// the form receives the agent being edited at presentation time (with
+    /// isPresented, @State init values don't re-apply between presentations).
+    private struct AgentSheetContext: Identifiable {
+        let index: Int?      // nil = add
+        let agent: AgentConfig?
+        var id: Int { index ?? -1 }
+    }
 
-    init(model: LauncherModel, initialTab: SettingsTab = .general, initialAdd: Bool = false) {
+    @State private var agentSheet: AgentSheetContext?
+    @State private var initialAddPending = false
+    @State private var initialEditIndex: Int?
+
+    init(model: LauncherModel, initialTab: SettingsTab = .general, initialAdd: Bool = false,
+         initialEditIndex: Int? = nil) {
         self.model = model
         _draft = State(initialValue: model.config)
         _tab = State(initialValue: initialTab)
-        _showingAddAgent = State(initialValue: initialAdd)
+        _initialAddPending = State(initialValue: initialAdd)
+        _initialEditIndex = State(initialValue: initialEditIndex)
     }
 
     var body: some View {
@@ -75,6 +88,14 @@ struct SettingsView: View {
         }
         .padding(20)
         .frame(width: 640, height: 560)
+        .onAppear {
+            if initialAddPending {
+                initialAddPending = false
+                agentSheet = AgentSheetContext(index: nil, agent: nil)
+            } else if let editIndex = initialEditIndex, draft.agents.indices.contains(editIndex) {
+                agentSheet = AgentSheetContext(index: editIndex, agent: draft.agents[editIndex])
+            }
+        }
         .onDisappear { persist() }
     }
 
@@ -159,8 +180,7 @@ struct SettingsView: View {
                     LabeledContent {
                         HStack(spacing: 8) {
                             Button {
-                                editingAgentIndex = index
-                                showingAddAgent = true
+                                agentSheet = AgentSheetContext(index: index, agent: draft.agents[index])
                             } label: {
                                 Image(systemName: "pencil")
                             }
@@ -194,8 +214,7 @@ struct SettingsView: View {
                     }
                 }
                 Button {
-                    editingAgentIndex = nil
-                    showingAddAgent = true
+                    agentSheet = AgentSheetContext(index: nil, agent: nil)
                 } label: {
                     Label("Add Agent…", systemImage: "plus")
                 }
@@ -208,23 +227,20 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .sheet(isPresented: $showingAddAgent) {
-            if let index = editingAgentIndex {
-                let current = draft.agents[index]
-                AgentFormSheet(existing: current,
-                               takenAliases: Set(draft.agents.map(\.alias)).subtracting([current.alias])) { updated in
-                    let oldAlias = current.alias
+        .sheet(item: $agentSheet) { context in
+            AgentFormSheet(
+                existing: context.agent,
+                takenAliases: Set(draft.agents.map(\.alias))
+                    .subtracting(context.agent.map { [$0.alias] } ?? [])) { updated in
+                if let index = context.index {
+                    let oldAlias = context.agent?.alias
                     draft.agents[index] = updated
                     if draft.defaultAgent == oldAlias { draft.defaultAgent = updated.alias }
-                    persist()
+                } else {
+                    draft.agents.append(updated)
+                    if draft.defaultAgent == nil { draft.defaultAgent = updated.alias }
                 }
-            } else {
-                AgentFormSheet(existing: nil,
-                               takenAliases: Set(draft.agents.map(\.alias))) { agent in
-                    draft.agents.append(agent)
-                    if draft.defaultAgent == nil { draft.defaultAgent = agent.alias }
-                    persist()
-                }
+                persist()
             }
         }
     }
