@@ -46,8 +46,9 @@ pure Apple frameworks so every feature leans on the platform directly.
   - `heycast://ask?text=…&agent=alias` does the same from scripts
   - copy a screenshot and the next agent request attaches it
     automatically (vision models only — configure an optional vision
-    model + base URL per agent, e.g. z.ai's text coding endpoint vs
-    its vision endpoint on `https://api.z.ai/api/paas/v4`)
+    model + base URL per agent; z.ai's `glm-5.3-flash` accepts images
+    on the coding endpoint itself, while text-only endpoints/models
+    need a vision model on e.g. `https://api.z.ai/api/paas/v4`)
   - failed requests get a Retry button
 
   ```json
