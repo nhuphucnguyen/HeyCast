@@ -30,7 +30,7 @@ final class AssistantStore {
         let url = Config.directory.appendingPathComponent("assistant.db")
         try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
         guard sqlite3_open(url.path, &db) == SQLITE_OK else {
-            NSLog("HeyCast: failed to open assistant db at \(url.path)")
+            NSLog("%@", "HeyCast: failed to open assistant db at \(url.path)")
             db = nil
             return
         }
@@ -84,6 +84,16 @@ final class AssistantStore {
             guard let self else { return }
             exec("UPDATE assistant_messages SET response = ?, error = NULL, status = 'done', done_at = ? WHERE id = ?",
                  [response, String(Int64(Date().timeIntervalSince1970 * 1000)), String(id)])
+        }
+    }
+
+    /// Stores the in-progress streamed text; the row stays "pending" until
+    /// updateResponse/updateError finalize it.
+    func updatePartial(id: Int64, response: String) {
+        queue.sync { [weak self] in
+            guard let self else { return }
+            exec("UPDATE assistant_messages SET response = ? WHERE id = ? AND status = 'pending'",
+                 [response, String(id)])
         }
     }
 

@@ -80,11 +80,17 @@ struct AssistantPageView: View {
 
                         switch message.status {
                         case .pending:
-                            HStack(spacing: 8) {
-                                ProgressView().scaleEffect(0.6)
-                                Text("Waiting for \(message.agent)…")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(model.theme.textColor.alpha(0.5))
+                            VStack(alignment: .leading, spacing: 8) {
+                                if let partial = message.response, !partial.isEmpty {
+                                    // Live-typed response while streaming.
+                                    MarkdownView(text: partial, theme: model.theme)
+                                }
+                                HStack(spacing: 8) {
+                                    ProgressView().scaleEffect(0.6)
+                                    Text("Waiting for \(message.agent)…")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(model.theme.textColor.alpha(0.5))
+                                }
                             }
                         case .failed:
                             Text(message.error ?? "Request failed")

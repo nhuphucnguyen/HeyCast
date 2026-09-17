@@ -30,7 +30,7 @@ final class FileSearchService: NSObject, NSMetadataQueryDelegate {
             ? [NSMetadataQueryLocalComputerScope]
             : searchDirs.map { ($0 as NSString).expandingTildeInPath }
         mdQuery.searchScopes = scopes
-        NSLog("HeyCast: mdquery scopes: \(scopes)")
+        NSLog("%@", "HeyCast: mdquery scopes: \(scopes)")
         // Escape quotes/wildcards for the LIKE pattern, then pass the whole
         // pattern as the predicate argument (embedding %@ inside quotes
         // breaks the pattern match).
@@ -88,7 +88,7 @@ final class FileSearchService: NSObject, NSMetadataQueryDelegate {
         }
         query.enableUpdates()
         results = hits
-        NSLog("HeyCast: file search collected \(hits.count) hits")
+        NSLog("%@", "HeyCast: file search collected \(hits.count) hits")
         onUpdate?()
     }
 

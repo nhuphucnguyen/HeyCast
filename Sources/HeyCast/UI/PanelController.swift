@@ -86,13 +86,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     // MARK: show/hide
 
     private func showPanel() {
-        NSLog("HeyCast: showPanel (frame before: \(panel.frame))")
+        NSLog("%@", "HeyCast: showPanel (frame before: \(panel.frame))")
         positionPanelIfNeeded()
         resizeToFitContent()
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         isPositionedOnce = true
-        NSLog("HeyCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
+        NSLog("%@", "HeyCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
     }
 
     private func hidePanel() {
@@ -268,14 +268,14 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func captureWindow(_ window: NSWindow, to url: URL) {
         let number = window.windowNumber
-        NSLog("HeyCast: capturing window num=\(number) title=\(window.title) visible=\(window.isVisible)")
+        NSLog("%@", "HeyCast: capturing window num=\(number) title=\(window.title) visible=\(window.isVisible)")
         guard number > 0, number < Int(UInt32.max) else { return }
         let windowID = CGWindowID(UInt32(number))
         if let cgImage = CGWindowListCreateImage(.infinite, .optionIncludingWindow, windowID, [.bestResolution]) {
             let rep = NSBitmapImageRep(cgImage: cgImage)
             if let png = rep.representation(using: .png, properties: [:]) {
                 try? png.write(to: url)
-                NSLog("HeyCast: captured \(url.path)")
+                NSLog("%@", "HeyCast: captured \(url.path)")
             }
         }
     }

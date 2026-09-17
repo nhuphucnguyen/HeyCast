@@ -39,7 +39,7 @@ final class SettingsWindowController {
                                                                   initialEditIndex: editAgentIndex))
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        NSLog("HeyCast: settings window shown (visible: \(window?.isVisible ?? false))")
+        NSLog("HeyCast: settings window shown (visible: %@)", String(window?.isVisible ?? false))
     }
 
     func hide() {
