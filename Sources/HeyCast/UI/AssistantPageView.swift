@@ -22,7 +22,7 @@ struct AssistantPageView: View {
             VStack(spacing: 2) {
                 if messages.isEmpty {
                     Text("Ask an agent — type a question and press Enter.\nConfigure agents in Settings → Assistant.")
-                        .font(.system(size: 13))
+                        .font(model.theme.font(.body))
                         .foregroundStyle(model.theme.textColor.alpha(0.5))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,10 +69,10 @@ struct AssistantPageView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 10) {
                         Text("You · \(message.agent)")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(model.theme.font(.subheadlineEmphasized))
                             .foregroundStyle(model.theme.textColor.alpha(0.5))
                         Text(message.request)
-                            .font(.system(size: 13))
+                            .font(model.theme.font(.body))
                             .foregroundStyle(model.theme.textColor.alpha(0.8))
                             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -102,13 +102,13 @@ struct AssistantPageView: View {
                                 HStack(spacing: 8) {
                                     ProgressView().scaleEffect(0.6)
                                     Text("Waiting for \(message.agent)…")
-                                        .font(.system(size: 12))
+                                        .font(model.theme.font(.callout))
                                         .foregroundStyle(model.theme.textColor.alpha(0.5))
                                 }
                             }
                         case .failed:
                             Text(message.error ?? "Request failed")
-                                .font(.system(size: 13))
+                                .font(model.theme.font(.body))
                                 .foregroundStyle(.red.opacity(0.8))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         case .done:
@@ -117,7 +117,7 @@ struct AssistantPageView: View {
                                     Image(systemName: "exclamationmark.triangle")
                                     Text(note)
                                 }
-                                .font(.system(size: 11))
+                                .font(model.theme.font(.subheadline))
                                 .foregroundStyle(.orange.opacity(0.8))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             }
@@ -126,6 +126,7 @@ struct AssistantPageView: View {
                         }
                     }
                     .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial))
                 }
                 HStack {
                     if message.status == .done,
@@ -144,7 +145,7 @@ struct AssistantPageView: View {
                         } label: {
                             Image(systemName: "arrow.clockwise")
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.bordered)
                         .help("Retry")
                     }
                     Button {
@@ -157,7 +158,7 @@ struct AssistantPageView: View {
                     Spacer()
                     if message.isUnread {
                         Text("new")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(model.theme.font(.footnoteEmphasized))
                             .foregroundStyle(model.theme.textColor.alpha(0.5))
                     }
                 }
@@ -177,16 +178,16 @@ private struct AssistantRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: statusIcon)
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.8))
                 .frame(width: 16)
             VStack(alignment: .leading, spacing: 1) {
                 Text(message.request)
-                    .font(.system(size: 13))
+                    .font(model.theme.font(.body))
                     .foregroundStyle(model.theme.textColor)
                     .lineLimit(1)
                 Text(message.agent)
-                    .font(.system(size: 10))
+                    .font(model.theme.font(.footnote))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
                     .lineLimit(1)
             }

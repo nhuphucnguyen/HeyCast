@@ -32,8 +32,9 @@ struct LauncherView: View {
         .background {
             // Guarantees readable text over the vibrancy material, whatever
             // window is behind the panel. Dark mode keeps its previous
-            // vibrancy-only look (its palette already carries the tint).
-            if !model.theme.isDark {
+            // vibrancy-only look (its palette already carries the tint), and
+            // Liquid Glass manages its own legibility — no overlay.
+            if !model.theme.isDark && !model.theme.usesGlass {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(model.theme.backgroundColor)
             }
@@ -55,7 +56,7 @@ struct LauncherView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             Text("Image attached — sent with your question")
-                .font(.system(size: 11))
+                .font(model.theme.font(.subheadline))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
             Spacer(minLength: 0)
             Button {
@@ -71,7 +72,7 @@ struct LauncherView: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(model.theme.secondaryBackground.alpha(0.5))
+                .fill(.ultraThinMaterial)
         )
     }
 
@@ -183,11 +184,11 @@ struct LauncherView: View {
     private var footer: some View {
         HStack {
             Text(model.footerText)
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
             Spacer()
             Text(pageLabel)
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
         }
         .padding(.vertical, 3)
@@ -225,7 +226,7 @@ struct ResultRow: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             Text(item.subtitle)
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.5))
                 .lineLimit(1)
             favoriteButton
@@ -304,7 +305,7 @@ struct FileRow: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             Text(FileSearchService.displayPath(hit.path))
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.5))
                 .lineLimit(1)
         }

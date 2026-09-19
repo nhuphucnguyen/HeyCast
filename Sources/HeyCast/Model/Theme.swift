@@ -1,6 +1,13 @@
 import AppKit
 import SwiftUI
 
+/// True when the OS ships the Liquid Glass APIs (macOS 26+); evaluated once
+/// so callers can branch without sprinkling #available everywhere.
+let liquidGlassSupported: Bool = {
+    if #available(macOS 26.0, *) { return true }
+    return false
+}()
+
 /// Colors and fonts derived from the user's theme config. Dark/light presets
 /// mirror RustCast's defaults; "system" follows the macOS interface style.
 struct Theme {
@@ -10,10 +17,19 @@ struct Theme {
     var focusedRow: Color
     var unfocusedRow: Color
     var blur: Bool
+    /// Liquid Glass panel background requested by config — only effective
+    /// when `usesGlass` says the OS supports it.
+    var liquidGlass: Bool = false
     var showIcons: Bool
     var showScrollBar: Bool
     var fontName: String?
     var isDark: Bool
+    /// The user's custom background hex, if any — tints the Liquid Glass
+    /// material instead of replacing it.
+    var customBackgroundHex: String?
+
+    /// Glass is actually rendered: configured on AND the OS has the API.
+    var usesGlass: Bool { liquidGlass && liquidGlassSupported }
 
     static let dark = Theme(
         textColor: Color(srgbRed: 0.95, green: 0.95, blue: 0.96, alpha: 1),
@@ -44,10 +60,13 @@ struct Theme {
         case .system: base = systemDark ? .dark : .light
         }
         base.blur = config.theme.blur
+        base.liquidGlass = config.theme.liquidGlass
+        base.customBackgroundHex = nil
         base.showIcons = config.theme.showIcons
         base.showScrollBar = config.theme.showScrollBar
         base.fontName = config.theme.fontName
         if let hex = config.theme.backgroundColor, let nsColor = NSColor(hex: hex) {
+            base.customBackgroundHex = hex
             let color = Color(nsColor: nsColor.withAlphaComponent(0.94))
             base.backgroundColor = color
             base.secondaryBackground = nsColor.lighten(0.12).swiftColor

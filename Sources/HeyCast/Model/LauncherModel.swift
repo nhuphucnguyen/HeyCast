@@ -26,6 +26,9 @@ final class LauncherModel: ObservableObject {
     /// along with the next agent question.
     @Published var pendingImage: Data? = nil
     @Published private(set) var showFavoriteHint = false
+    /// Human-readable problem with the configured hotkeys (invalid syntax or
+    /// a registration conflict); nil when everything registered fine.
+    @Published private(set) var hotkeyIssue: String? = nil
 
     // MARK: config & stores
     var config: Config {
@@ -55,6 +58,12 @@ final class LauncherModel: ObservableObject {
     var onLayoutChanged: (() -> Void)?
     var onAssistantUnread: ((Int) -> Void)?
     private var shellHotkeys: [Shortcut: ShellCommandConfig] = [:]
+    /// Last shortcut that parsed *and* registered for each config hotkey —
+    /// an invalid config value falls back to these instead of leaving the
+    /// launcher unreachable.
+    private var lastGoodToggle: Shortcut?
+    private var lastGoodClipboard: Shortcut?
+    private let configWatcher = ConfigWatcher()
     private var rankingSaveTask: Task<Void, Never>?
     private var fileSearchDebounceTask: Task<Void, Never>?
     private var emojiDebounceTask: Task<Void, Never>?
@@ -89,6 +98,11 @@ final class LauncherModel: ObservableObject {
         applyHotkeys()
         if config.mainPage == .events {
             refreshResults()
+        }
+        // config.json is documented as hand-editable — apply external edits
+        // live. The equality check inside reloadConfig skips our own saves.
+        configWatcher.start { [weak self] in
+            self?.reloadConfig()
         }
     }
 
@@ -610,7 +624,7 @@ final class LauncherModel: ObservableObject {
             hide()
 
         case .reload:
-            reloadConfig()
+            reloadConfig(force: true)
 
         case .openEvent:
             CalendarService.openInCalendar()
@@ -852,10 +866,39 @@ final class LauncherModel: ObservableObject {
 
     // MARK: - hotkeys
 
+    /// Resolves a config hotkey string: empty disables on purpose, valid
+    /// values update the last-good shortcut, invalid ones keep whatever
+    /// worked before and surface an issue instead of silently dropping the
+    /// hotkey.
+    private func resolveHotkey(_ string: String, label: String, fallback: inout Shortcut?,
+                               issues: inout [String]) -> Shortcut? {
+        let trimmed = string.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            fallback = nil
+            return nil
+        }
+        if let shortcut = Shortcut(string: trimmed) {
+            fallback = shortcut
+            return shortcut
+        }
+        let kept = fallback.map { "still using \($0.displayString)" } ?? "no shortcut is set — try ALT+SPACE style"
+        issues.append("\(label) “\(trimmed)” isn’t valid, \(kept)")
+        return fallback
+    }
+
     private func applyHotkeys() {
         var shortcuts: [Shortcut] = []
-        if let toggle = Shortcut(string: config.toggleHotkey) { shortcuts.append(toggle) }
-        if config.clipboardHistoryEnabled, let cb = Shortcut(string: config.clipboardHotkey) { shortcuts.append(cb) }
+        var issues: [String] = []
+
+        if let toggle = resolveHotkey(config.toggleHotkey, label: "Toggle hotkey",
+                                      fallback: &lastGoodToggle, issues: &issues) {
+            shortcuts.append(toggle)
+        }
+        if config.clipboardHistoryEnabled,
+           let clipboard = resolveHotkey(config.clipboardHotkey, label: "Clipboard hotkey",
+                                         fallback: &lastGoodClipboard, issues: &issues) {
+            shortcuts.append(clipboard)
+        }
 
         shellHotkeys = [:]
         for shell in config.shells {
@@ -866,10 +909,12 @@ final class LauncherModel: ObservableObject {
 
         HotKeyManager.shared.onHotKey = { [weak self] shortcut in
             guard let self else { return }
-            if let toggle = Shortcut(string: self.config.toggleHotkey), shortcut == toggle {
+            // Match against the registered (last-good) shortcuts — the raw
+            // config string may be mid-edit and unparseable.
+            if let toggle = self.lastGoodToggle, shortcut == toggle {
                 self.toggle()
-            } else if let cb = Shortcut(string: self.config.clipboardHotkey),
-                      shortcut == cb, self.config.clipboardHistoryEnabled {
+            } else if self.config.clipboardHistoryEnabled,
+                      let cb = self.lastGoodClipboard, shortcut == cb {
                 if self.panelIsVisible && self.page == .clipboard {
                     self.hide()
                 } else {
@@ -879,7 +924,12 @@ final class LauncherModel: ObservableObject {
                 ShellRunner.run(shell.command)
             }
         }
-        HotKeyManager.shared.update(shortcuts: shortcuts)
+        let failures = HotKeyManager.shared.update(shortcuts: shortcuts)
+        for failure in failures {
+            issues.append("\(failure.shortcut.displayString) couldn’t be registered — another app " +
+                          "probably owns that combo. Change it in Settings or config.json.")
+        }
+        hotkeyIssue = issues.isEmpty ? nil : issues.joined(separator: " ")
     }
 
     // MARK: - config reload
@@ -892,8 +942,17 @@ final class LauncherModel: ObservableObject {
         onLayoutChanged?()
     }
 
-    func reloadConfig() {
-        config = Config.load()
+    /// Reloads config.json. `force` (⌘R / tray Refresh) also refreshes the
+    /// app index even when the config is unchanged; the file watcher passes
+    /// false so the app's own saves are no-ops. A missing or half-written
+    /// file never wipes the running configuration.
+    func reloadConfig(force: Bool = false) {
+        guard let fresh = try? Config.loadFromDisk() else {
+            NSLog("HeyCast: config.json missing or unreadable — keeping the current configuration")
+            return
+        }
+        guard force || fresh != config else { return }
+        config = fresh
         appIndex.load(blacklist: config.blacklist) { [weak self] in
             self?.refreshResults()
         }

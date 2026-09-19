@@ -97,7 +97,7 @@ final class StatusItemController {
 
     @objc private func toggleView() { model?.toggle() }
     @objc private func openSettings() { AppDelegate.shared?.showSettings() }
-    @objc private func refreshConfig() { model?.reloadConfig() }
+    @objc private func refreshConfig() { model?.reloadConfig(force: true) }
     @objc private func toggleClipboardPause() {
         guard let model else { return }
         model.config.clipboardCapturePaused.toggle()

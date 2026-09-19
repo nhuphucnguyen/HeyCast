@@ -3,7 +3,8 @@ import Carbon.HIToolbox
 
 /// A keyboard shortcut like "ALT+SPACE" or "SUPER+SHIFT+C" parsed into
 /// Carbon modifier flags + a virtual keycode, mirroring RustCast's syntax
-/// (SUPER == Command on macOS).
+/// (SUPER == Command on macOS). The pretty modifier symbols (⌘⌥⌃⇧) are
+/// accepted too, so "⌥Space" parses the same as "ALT+SPACE".
 struct Shortcut {
     var keyCode: UInt32
     var modifiers: NSEvent.ModifierFlags
@@ -14,19 +15,22 @@ struct Shortcut {
         var hasMods = false
         var keyName: String?
 
-        for rawToken in string.split(separator: "+") {
+        for rawToken in Shortcut.normalize(string).split(separator: "+") {
             let token = rawToken.trimmingCharacters(in: .whitespaces).lowercased()
             switch token {
             case "cmd", "command", "super": mods.insert(.command); hasMods = true
             case "opt", "option", "alt": mods.insert(.option); hasMods = true
             case "ctrl", "control": mods.insert(.control); hasMods = true
             case "shift": mods.insert(.shift); hasMods = true
-            case "fn", "function": mods.insert(.function); hasMods = true
             default:
                 if keyName == nil { keyName = token } else { return nil }
             }
         }
         guard let name = keyName, let code = Shortcut.keyCode(for: name) else { return nil }
+        // A bare letter/digit/space would be swallowed system-wide, and the
+        // fn/globe key has no Carbon hotkey representation at all — only
+        // F-keys may stand without modifiers.
+        guard hasMods || Shortcut.isFunctionKey(code) else { return nil }
         keyCode = code
         modifiers = mods
         self.hasMods = hasMods
@@ -46,6 +50,61 @@ struct Shortcut {
         if modifiers.contains(.command) { out += "⌘" }
         out += Shortcut.keyName(for: keyCode) ?? "?"
         return out
+    }
+
+    /// The config-file spelling, e.g. "CTRL+ALT+T" — the round trip through
+    /// `init?(string:)` is guaranteed for shortcuts built from real events.
+    var canonicalString: String {
+        var parts: [String] = []
+        if modifiers.contains(.control) { parts.append("CTRL") }
+        if modifiers.contains(.option) { parts.append("ALT") }
+        if modifiers.contains(.shift) { parts.append("SHIFT") }
+        if modifiers.contains(.command) { parts.append("SUPER") }
+        if let name = Shortcut.keyName(for: keyCode) { parts.append(name.uppercased()) }
+        return parts.joined(separator: "+")
+    }
+
+    /// Expands pretty modifier glyphs so "⌥⌘K" becomes "alt+super+K" before
+    /// the +/-split — users naturally type the symbols the UI shows.
+    private static func normalize(_ string: String) -> String {
+        var out = string
+        for (symbol, word) in [("⌘", "super+"), ("⌥", "alt+"), ("⌃", "ctrl+"), ("⇧", "shift+")] {
+            out = out.replacingOccurrences(of: symbol, with: word)
+        }
+        return out
+    }
+
+    /// nil = fine (empty means "hotkey disabled on purpose"); otherwise a
+    /// short explanation for the settings UI / config log.
+    static func validationMessage(for string: String) -> String? {
+        let trimmed = string.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return nil }
+        var modifierCount = 0
+        var usesFn = false
+        var keys: [String] = []
+        for rawToken in normalize(trimmed).split(separator: "+") {
+            let token = rawToken.trimmingCharacters(in: .whitespaces).lowercased()
+            switch token {
+            case "cmd", "command", "super", "opt", "option", "alt", "ctrl", "control", "shift":
+                modifierCount += 1
+            case "fn", "function":
+                usesFn = true
+            default:
+                keys.append(token)
+            }
+        }
+        if usesFn { return "The fn/globe (🌐) key can't be part of a global hotkey." }
+        if keys.count > 1 { return "Use exactly one non-modifier key, e.g. ALT+SPACE." }
+        guard let key = keys.first else {
+            return "Add the key itself — modifiers alone can't be a shortcut."
+        }
+        guard let code = keyCode(for: key) else {
+            return "Unknown key “\(key)”. Write ALT+SPACE style (or ⌥Space); F1–F12, SPACE, TAB, … are understood."
+        }
+        if modifierCount == 0 && !isFunctionKey(code) {
+            return "Add at least one modifier (CTRL, ALT, SHIFT or SUPER) — a bare key would be captured everywhere."
+        }
+        return nil
     }
 
     // MARK: key code mapping
@@ -87,6 +146,15 @@ struct Shortcut {
         return named[name]
     }
 
+    private static let functionKeyCodes: Set<UInt32> = [
+        UInt32(kVK_F1), UInt32(kVK_F2), UInt32(kVK_F3), UInt32(kVK_F4), UInt32(kVK_F5), UInt32(kVK_F6),
+        UInt32(kVK_F7), UInt32(kVK_F8), UInt32(kVK_F9), UInt32(kVK_F10), UInt32(kVK_F11), UInt32(kVK_F12),
+    ]
+
+    static func isFunctionKey(_ code: UInt32) -> Bool {
+        functionKeyCodes.contains(code)
+    }
+
     static func keyName(for code: UInt32) -> String? {
         if let entry = (letters.first { $0.value == code }) { return entry.key.uppercased() }
         if let entry = (digits.first { $0.value == code }) { return entry.key }
@@ -122,38 +190,52 @@ final class HotKeyManager {
         var hotKeyRef: EventHotKeyRef?
     }
 
+    struct RegistrationFailure {
+        let shortcut: Shortcut
+        let status: OSStatus
+    }
+
     private var registrations: [Registration] = []
     private var nextID: UInt32 = 1
     private var eventHandler: EventHandlerUPP?
     private var installed = false
     var onHotKey: ((Shortcut) -> Void)?
 
-    func update(shortcuts: [Shortcut]) {
-        unregisterAll()
-        for shortcut in shortcuts {
-            register(shortcut)
-        }
-    }
-
-    private func register(_ shortcut: Shortcut) {
+    /// Swaps the active hotkey set. Each shortcut registers independently:
+    /// a combo another process refuses to release only drops that one
+    /// hotkey — the rest (crucially the toggle) still go live, and every
+    /// failure is reported back.
+    @discardableResult
+    func update(shortcuts: [Shortcut]) -> [RegistrationFailure] {
         installHandlerIfNeeded()
-        let id = nextID
-        nextID += 1
-        var ref: EventHotKeyRef?
-        let hotKeyID = EventHotKeyID(signature: OSType(0x48455943) /* HEYC */, id: id)
-        let status = RegisterEventHotKey(
-            shortcut.keyCode,
-            shortcut.modifiers.carbonFlags,
-            hotKeyID,
-            GetApplicationEventTarget(),
-            0,
-            &ref
-        )
-        guard status == noErr else {
-            NSLog("HeyCast: failed to register hotkey %@ (%d)", shortcut.displayString, status)
-            return
+        var seen = Set<Shortcut>()
+        var fresh: [Registration] = []
+        var failures: [RegistrationFailure] = []
+        for shortcut in shortcuts where !seen.contains(shortcut) {
+            seen.insert(shortcut)
+            let id = nextID
+            nextID += 1
+            var ref: EventHotKeyRef?
+            let hotKeyID = EventHotKeyID(signature: OSType(0x48455943) /* HEYC */, id: id)
+            let status = RegisterEventHotKey(
+                shortcut.keyCode,
+                shortcut.modifiers.carbonFlags,
+                hotKeyID,
+                GetApplicationEventTarget(),
+                0,
+                &ref
+            )
+            guard status == noErr, let ref else {
+                NSLog("HeyCast: failed to register hotkey %@ (%d)", shortcut.displayString, status)
+                failures.append(RegistrationFailure(shortcut: shortcut, status: status))
+                continue
+            }
+            fresh.append(Registration(shortcut: shortcut, id: id, hotKeyRef: ref))
         }
-        registrations.append(Registration(shortcut: shortcut, id: id, hotKeyRef: ref))
+        unregisterAll()
+        registrations = fresh
+        NSLog("HeyCast: active hotkeys — %@", fresh.map(\.shortcut.displayString).joined(separator: ", "))
+        return failures
     }
 
     private func unregisterAll() {

@@ -103,6 +103,15 @@ struct SettingsView: View {
         model.updateConfig(draft)
     }
 
+    /// Inline complaint for hand-typed config values the recorder wouldn't
+    /// have produced (unknown keys, missing modifiers, fn, …).
+    @ViewBuilder
+    private func hotkeyValidation(for value: String) -> some View {
+        if let message = Shortcut.validationMessage(for: value) {
+            Text(message).font(.caption).foregroundStyle(.red)
+        }
+    }
+
     // MARK: general
 
     private var generalTab: some View {
@@ -124,8 +133,18 @@ struct SettingsView: View {
                 .onChange(of: draft.mainPage) { _ in persist() }
                 Toggle("Show tray icon", isOn: $draft.showTrayIcon).onChange(of: draft.showTrayIcon) { _ in persist() }
             }
-            Section("Hotkeys") {
-                TextField("Toggle hotkey (e.g. ALT+SPACE)", text: $draft.toggleHotkey).onSubmit { persist() }
+            Section {
+                LabeledContent("Toggle HeyCast") {
+                    HotkeyRecorder(value: $draft.toggleHotkey) { persist() }
+                        .frame(width: 190)
+                        .help("Click, then press the shortcut. Esc cancels, ⌫ clears.")
+                }
+                hotkeyValidation(for: draft.toggleHotkey)
+                if let issue = model.hotkeyIssue {
+                    Text(issue).font(.caption).foregroundStyle(.orange)
+                }
+            } header: {
+                Text("Hotkeys")
             }
             Section("Behavior") {
                 Toggle("Haptic feedback while typing", isOn: $draft.hapticFeedback).onChange(of: draft.hapticFeedback) { _ in persist() }
@@ -158,8 +177,12 @@ struct SettingsView: View {
                 Button("Clear History") { model.clearClipboard() }
             }
             Section("Selecting entries") {
-                TextField("Open clipboard hotkey (e.g. SUPER+SHIFT+C)", text: $draft.clipboardHotkey)
-                    .onSubmit { persist() }
+                LabeledContent("Open clipboard") {
+                    HotkeyRecorder(value: $draft.clipboardHotkey) { persist() }
+                        .frame(width: 190)
+                        .help("Click, then press the shortcut. Esc cancels, ⌫ clears.")
+                }
+                hotkeyValidation(for: draft.clipboardHotkey)
                 Toggle("Paste into previous app on select", isOn: $draft.clipboardPasteOnSelect)
                     .onChange(of: draft.clipboardPasteOnSelect) { _ in persist() }
             }
@@ -410,6 +433,13 @@ struct SettingsView: View {
                     }
                 }
                 .onChange(of: draft.theme.mode) { _ in persist() }
+                Toggle("Liquid Glass background", isOn: $draft.theme.liquidGlass)
+                    .disabled(!liquidGlassSupported)
+                    .onChange(of: draft.theme.liquidGlass) { _ in persist() }
+                if !liquidGlassSupported {
+                    Text("Liquid Glass requires macOS 26 or later — the vibrancy background is used instead.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Toggle("Blur background (vibrancy)", isOn: $draft.theme.blur).onChange(of: draft.theme.blur) { _ in persist() }
                 Toggle("Show icons", isOn: $draft.theme.showIcons).onChange(of: draft.theme.showIcons) { _ in persist() }
                 Toggle("Show scroll bar", isOn: $draft.theme.showScrollBar).onChange(of: draft.theme.showScrollBar) { _ in persist() }

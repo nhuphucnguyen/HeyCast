@@ -71,12 +71,22 @@ pure Apple frameworks so every feature leans on the platform directly.
 - Global hotkeys via Carbon `RegisterEventHotKey` — no permissions needed
   (default toggle `⌥Space`, clipboard `⌘⇧C`)
 - Borderless floating `NSPanel` with `NSVisualEffectView` vibrancy, appears on
-  all Spaces, hides on focus loss, dynamic height (max 5 rows)
+  all Spaces, hides on focus loss, dynamic height (max 5 rows); on macOS 26+
+  the panel background uses the system **Liquid Glass** material
+  (`NSGlassEffectView`, interactive on macOS 27; `theme.liquidGlass` in
+  config.json turns it off, custom background colors tint it)
+- Aligned with Apple's macOS 27 design kit: inner surfaces (assistant
+  messages, clipboard preview, chips) use standard materials, text follows
+  the system type scale (Footnote 10 / Subheadline 11 / Callout 12 /
+  Body 13, custom fonts still honored via `Theme.font`), and standalone
+  actions (Retry, Clear) use system buttons that render as the macOS 27
+  capsule style automatically
 - Menu bar status item (`NSStatusItem`) with full menu
 - Haptic feedback (`NSHapticFeedbackManager`), input-source restore (`TIS`),
   start-at-login (`SMAppService`), calendar events (`EventKit`)
 - `heycast://` URL scheme, dark/light/system theming, custom fonts/colors,
-  settings window (General / Appearance / Commands), config hot-reload (`⌘R`)
+  settings window (General / Appearance / Commands), config hot-reload (`⌘R`,
+  plus live reload when config.json is edited externally)
 
 ## Build & run
 
@@ -107,8 +117,12 @@ start-at-login.
 ## Configuration
 
 `~/Library/Application Support/HeyCast/config.json` — created with defaults on
-first launch. Notable keys: `toggleHotkey` / `clipboardHotkey` (syntax
-`ALT+SPACE`, `SUPER+SHIFT+C`, `CTRL+ALT+T`, … — `SUPER` = `CMD`), `placeholder`,
+first launch, and hot-applied when edited (while HeyCast runs, external edits
+reload automatically). Notable keys: `toggleHotkey` / `clipboardHotkey`
+(syntax `ALT+SPACE`, `SUPER+SHIFT+C`, `CTRL+ALT+T`, … — `SUPER` = `CMD`; the
+pretty symbols `⌘⌥⌃⇧` work too, F1–F12 may stand alone, an empty string
+disables the hotkey; Settings records combos with a click-and-press field),
+`placeholder`,
 `searchURL` (`%s` is the query), `mainPage` (`blank` / `favourites` /
 `frequentlyUsed` / `events`), `windowLocation`, `theme` (mode, blur, colors,
 font), `shells` (`{command, alias, hotkey?}`), `modes` (`name → script`),
@@ -132,8 +146,7 @@ packaging in `scripts/`.
 
 - Favourites sort **above** other results (Raycast/Alfred convention)
 - Empty query shows core built-ins instead of a blank pane
-- No auto-updater yet; hotkey recording in settings is future work (edit the
-  config JSON instead)
+- No auto-updater yet
 - Window tiling prompts for Accessibility permission on first use (same as the
   original); haptic tick on failure
 

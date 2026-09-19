@@ -65,9 +65,11 @@ extension AgentConfig {
     }
 }
 
-struct ThemeConfig: Codable {
+struct ThemeConfig: Codable, Equatable {
     var mode: ThemeMode = .dark
     var blur: Bool = true
+    /// Liquid Glass panel background (macOS 26+); ignored on older systems.
+    var liquidGlass: Bool = true
     var showIcons: Bool = true
     var showScrollBar: Bool = false
     var backgroundColor: String? = nil  // hex like "#101014", overrides preset
@@ -86,6 +88,7 @@ struct ThemeConfig: Codable {
         if let raw = try c.decodeIfPresent(String.self, forKey: .mode),
            let value = ThemeMode(rawValue: raw) { mode = value }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .blur) { blur = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .liquidGlass) { liquidGlass = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .showIcons) { showIcons = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .showScrollBar) { showScrollBar = v }
         backgroundColor = try c.decodeIfPresent(String.self, forKey: .backgroundColor)
@@ -94,7 +97,7 @@ struct ThemeConfig: Codable {
     }
 }
 
-struct Config: Codable {
+struct Config: Codable, Equatable {
     var toggleHotkey: String = "ALT+SPACE"
     var clipboardHotkey: String = "SUPER+SHIFT+C"
     var placeholder: String = "Time to be productive!"
@@ -170,16 +173,24 @@ struct Config: Codable {
 
     static var fileURL: URL { directory.appendingPathComponent("config.json") }
 
+    enum FileIssue: Error { case missing }
+
+    /// Reads + decodes config.json. Throws `.missing` when the file isn't
+    /// there and the decoding error when the JSON is broken (e.g. an editor
+    /// mid-save) — callers that must not lose the running config use this
+    /// instead of `load()`.
+    static func loadFromDisk() throws -> Config {
+        guard let data = try? Data(contentsOf: fileURL) else { throw FileIssue.missing }
+        return try JSONDecoder().decode(Config.self, from: data)
+    }
+
     static func load() -> Config {
         let defaults = Config()
-        guard FileManager.default.fileExists(atPath: fileURL.path),
-              let data = try? Data(contentsOf: Self.fileURL) else {
+        do {
+            return try loadFromDisk()
+        } catch FileIssue.missing {
             defaults.save()
             return defaults
-        }
-        do {
-            let decoded = try JSONDecoder().decode(Config.self, from: data)
-            return decoded
         } catch {
             // Keep valid parts by decoding field-by-field is overkill; fall back
             // to defaults but preserve the broken file for the user to inspect.

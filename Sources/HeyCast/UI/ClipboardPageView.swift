@@ -14,7 +14,7 @@ struct ClipboardPageView: View {
             VStack(spacing: 2) {
                 if items.isEmpty {
                     Text("Copy something to use the clipboard history")
-                        .font(.system(size: 13))
+                        .font(model.theme.font(.body))
                         .foregroundStyle(model.theme.textColor.alpha(0.5))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -74,13 +74,14 @@ struct ClipboardPageView: View {
                             }
                         case .text, .url:
                             Text(selected.text ?? "")
-                                .font(.system(size: 14))
+                                .font(model.theme.font(.body))
                                 .foregroundStyle(model.theme.textColor)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                     .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial))
                 }
                 HStack {
                     if selected.kind == .url, let text = selected.text, let url = URL(string: text) {
@@ -110,12 +111,12 @@ struct ClipboardPageView: View {
                     Button("Clear") {
                         model.clearClipboard()
                     }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
+                    .buttonStyle(.bordered)
+                    .font(model.theme.font(.callout))
                     .help("Clear history (pinned entries are kept)")
                 }
                 Text(metaLine(for: selected))
-                    .font(.system(size: 11))
+                    .font(model.theme.font(.subheadline))
                     .foregroundStyle(model.theme.textColor.alpha(0.5))
                     .lineLimit(1)
             } else {
@@ -149,25 +150,25 @@ private struct ClipboardRow: View {
             rowIcon
                 .frame(width: 16, height: 16)
             Text(entry.preview)
-                .font(.system(size: 13))
+                .font(model.theme.font(.body))
                 .foregroundStyle(model.theme.textColor)
                 .lineLimit(1)
             Spacer(minLength: 0)
             // Maccy-style hint: the first nine entries respond to ⌘1…⌘9.
             if index < 9 {
                 Text("\(index + 1)")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(model.theme.font(.footnoteEmphasized))
                     .foregroundStyle(model.theme.textColor.alpha(0.35))
                     .frame(width: 10)
             }
             if entry.copies > 1 {
                 Text("×\(entry.copies)")
-                    .font(.system(size: 11))
+                    .font(model.theme.font(.subheadline))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
             }
             if entry.isPinned {
                 Image(systemName: "pin.fill")
-                    .font(.system(size: 9))
+                    .font(model.theme.font(.footnote))
                     .foregroundStyle(model.theme.textColor.alpha(0.55))
             }
         }
@@ -188,7 +189,7 @@ private struct ClipboardRow: View {
                 .resizable()
         } else {
             Image(systemName: iconName)
-                .font(.system(size: 12))
+                .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.8))
         }
     }

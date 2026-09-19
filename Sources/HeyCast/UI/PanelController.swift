@@ -5,16 +5,66 @@ final class LauncherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-/// Owns the floating launcher panel: vibrancy background, dynamic resizing,
-/// positioning, hide-on-blur and the local keyboard monitor that implements
-/// the launcher key bindings.
+/// Panel background for macOS 26+: the system Liquid Glass material.
+/// Encapsulated in its own class because NSGlassEffectView can't be named in
+/// stored properties at a pre-26 deployment target.
+@available(macOS 26.0, *)
+final class LauncherGlassView: NSView {
+    private let glass = NSGlassEffectView()
+
+    init(cornerRadius: CGFloat) {
+        super.init(frame: .zero)
+        glass.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glass)
+        NSLayoutConstraint.activate([
+            glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+            glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+            glass.topAnchor.constraint(equalTo: topAnchor),
+            glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        glass.cornerRadius = cornerRadius
+        glass.style = .regular
+        if #available(macOS 27.0, *) {
+            // The whole panel is interactive (rows, grid, buttons) — glass
+            // should respond to those interactions.
+            glass.effectIsInteractive = true
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+    var content: NSView? {
+        get { glass.contentView }
+        set { glass.contentView = newValue }
+    }
+
+    /// A custom background color from the config tints the glass toward it;
+    /// preset palettes leave the glass untinted (the material adapts to
+    /// dark/light itself).
+    func update(theme: Theme) {
+        if let hex = theme.customBackgroundHex, let tint = NSColor(hex: hex) {
+            glass.tintColor = tint
+        } else {
+            glass.tintColor = nil
+        }
+    }
+}
+
+/// Owns the floating launcher panel: glass/vibrancy background, dynamic
+/// resizing, positioning, hide-on-blur and the local keyboard monitor that
+/// implements the launcher key bindings.
 @MainActor
 final class PanelController: NSObject, NSWindowDelegate {
     let panel: LauncherPanel
     let model: LauncherModel
     private let vibrancyView = NSVisualEffectView()
+    private let hostingView: NSHostingView<AnyView>
+    /// Non-nil (as a plain NSView) while the Liquid Glass background is in
+    /// use; otherwise the vibrancy view is live.
+    private var glassBackground: NSView?
     private var keyMonitor: Any?
     private var isPositionedOnce = false
+    private static let panelCornerRadius: CGFloat = 16
 
     init(model: LauncherModel) {
         self.model = model
@@ -24,6 +74,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
+        self.hostingView = NSHostingView(rootView: AnyView(LauncherView(model: model)))
         super.init()
 
         panel.titlebarAppearsTransparent = true
@@ -44,43 +95,73 @@ final class PanelController: NSObject, NSWindowDelegate {
         vibrancyView.blendingMode = .behindWindow
         vibrancyView.state = .active
         vibrancyView.wantsLayer = true
-        vibrancyView.layer?.cornerRadius = 16
+        vibrancyView.layer?.cornerRadius = Self.panelCornerRadius
         vibrancyView.layer?.cornerCurve = .continuous
         vibrancyView.layer?.masksToBounds = true
 
-        let hosting = NSHostingView(rootView: AnyView(LauncherView(model: model)))
-        vibrancyView.addSubview(hosting)
-        hosting.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            hosting.leadingAnchor.constraint(equalTo: vibrancyView.leadingAnchor),
-            hosting.trailingAnchor.constraint(equalTo: vibrancyView.trailingAnchor),
-            hosting.topAnchor.constraint(equalTo: vibrancyView.topAnchor),
-            hosting.bottomAnchor.constraint(equalTo: vibrancyView.bottomAnchor),
-        ])
+        embedHosting(in: vibrancyView)
         panel.contentView = vibrancyView
         applyThemeBackground()
 
         model.onShowPanel = { [weak self] in self?.showPanel() }
         model.onHidePanel = { [weak self] in self?.hidePanel() }
-        model.onLayoutChanged = { [weak self] in self?.resizeToFitContent() }
+        model.onLayoutChanged = { [weak self] in
+            self?.resizeToFitContent()
+            self?.refreshTheme()
+        }
         model.onOpenSettings = { AppDelegate.shared?.showSettings() }
 
         installKeyMonitor()
     }
 
+    /// Pins the hosting view to all edges of a plain container view.
+    private func embedHosting(in container: NSView) {
+        container.addSubview(hostingView)
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: container.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+    }
+
     private func applyThemeBackground() {
-        vibrancyView.blendingMode = .behindWindow
-        if model.theme.blur {
-            // .hudWindow is always dark and ignores appearance, which made the
-            // light theme unreadable; use a light-following material for light.
-            vibrancyView.material = model.theme.isDark ? .hudWindow : .windowBackground
-            vibrancyView.isHidden = false
+        if model.theme.usesGlass, glassBackground == nil {
+            installGlass()
+        } else if !model.theme.usesGlass, glassBackground != nil {
+            installVibrancy()
+        }
+
+        if #available(macOS 26.0, *), let glass = glassBackground as? LauncherGlassView {
+            vibrancyView.isHidden = true
+            glass.update(theme: model.theme)
         } else {
             vibrancyView.isHidden = false
-            vibrancyView.material = .titlebar
-            vibrancyView.blendingMode = .withinWindow
-            vibrancyView.blendingMode = .withinWindow
+            vibrancyView.blendingMode = .behindWindow
+            if model.theme.blur {
+                // .hudWindow is always dark and ignores appearance, which made the
+                // light theme unreadable; use a light-following material for light.
+                vibrancyView.material = model.theme.isDark ? .hudWindow : .windowBackground
+            } else {
+                vibrancyView.material = .titlebar
+                vibrancyView.blendingMode = .withinWindow
+            }
         }
+    }
+
+    private func installGlass() {
+        guard #available(macOS 26.0, *) else { return }
+        let glass = LauncherGlassView(cornerRadius: Self.panelCornerRadius)
+        glassBackground = glass
+        glass.content = hostingView
+        panel.contentView = glass
+    }
+
+    private func installVibrancy() {
+        glassBackground = nil
+        embedHosting(in: vibrancyView)
+        panel.contentView = vibrancyView
     }
 
     // MARK: show/hide
@@ -218,9 +299,9 @@ final class PanelController: NSObject, NSWindowDelegate {
                     return nil
                 }
                 return event
-            case "r":
-                model.reloadConfig()
-                return nil
+                case "r":
+                    model.reloadConfig(force: true)
+                    return nil
             case ",":
                 AppDelegate.shared?.showSettings()
                 return nil
@@ -258,7 +339,8 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     /// Re-apply appearance after a theme change.
     func refreshTheme() {
-        panel.appearance = NSAppearance(named: model.theme.isDark ? .darkAqua : .aqua)
+        let appearance = NSAppearance(named: model.theme.isDark ? .darkAqua : .aqua)
+        if panel.appearance != appearance { panel.appearance = appearance }
         applyThemeBackground()
     }
 
