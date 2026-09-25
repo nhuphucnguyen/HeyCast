@@ -1,6 +1,9 @@
 import AppKit
 import SwiftUI
 
+/// Maccy/Spotlight-style popup: a nonactivating panel that becomes the key
+/// window WITHOUT activating HeyCast, so the previously frontmost app stays
+/// active and its caret is never disturbed (see styleMask in PanelController).
 final class LauncherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
@@ -68,9 +71,12 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     init(model: LauncherModel) {
         self.model = model
+        // .nonactivatingPanel is the load-bearing piece: the panel takes key
+        // status while the user's app stays frontmost, so hiding needs no
+        // focus handback and the caret reappears where it was.
         self.panel = LauncherPanel(
             contentRect: NSRect(x: 0, y: 0, width: LauncherModel.windowWidth, height: 150),
-            styleMask: [.borderless, .titled],
+            styleMask: [.nonactivatingPanel, .borderless, .titled],
             backing: .buffered,
             defer: false
         )
@@ -170,8 +176,11 @@ final class PanelController: NSObject, NSWindowDelegate {
         NSLog("%@", "HeyCast: showPanel (frame before: \(panel.frame))")
         positionPanelIfNeeded()
         resizeToFitContent()
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        // Order front without touching app activation, then take key status
+        // for the search field. NSApp.activate is deliberately not called:
+        // activating HeyCast here is what used to drop the user's caret.
+        panel.orderFrontRegardless()
+        panel.makeKey()
         isPositionedOnce = true
         NSLog("%@", "HeyCast: showPanel done (frame after: \(panel.frame), visible: \(panel.isVisible), key: \(panel.isKeyWindow))")
     }
