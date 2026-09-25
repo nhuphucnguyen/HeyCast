@@ -60,6 +60,7 @@ final class LauncherGlassView: NSView {
 final class PanelController: NSObject, NSWindowDelegate {
     let panel: LauncherPanel
     let model: LauncherModel
+    private let imageViewer = ClipboardImageViewerController()
     private let vibrancyView = NSVisualEffectView()
     private let hostingView: NSHostingView<AnyView>
     /// Non-nil (as a plain NSView) while the Liquid Glass background is in
@@ -111,6 +112,10 @@ final class PanelController: NSObject, NSWindowDelegate {
 
         model.onShowPanel = { [weak self] in self?.showPanel() }
         model.onHidePanel = { [weak self] in self?.hidePanel() }
+        model.onShowImageViewer = { [weak self] in
+            guard let self else { return }
+            self.imageViewer.toggle(model: self.model, parent: self.panel)
+        }
         model.onLayoutChanged = { [weak self] in
             self?.resizeToFitContent()
             self?.refreshTheme()
@@ -187,6 +192,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func hidePanel() {
         NSLog("HeyCast: hidePanel called")
+        imageViewer.close(reason: "panel hidden")
         panel.orderOut(nil)
     }
 
@@ -221,16 +227,35 @@ final class PanelController: NSObject, NSWindowDelegate {
         return NSRect(x: x, y: y, width: w, height: h)
     }
 
-    /// Resize the panel to match the current content, keeping the top edge fixed.
+    /// Resize the panel to match the current content, keeping the top edge
+    /// fixed. Width changes (the clipboard image preview slideout) anchor to
+    /// one edge so the list stays put under the pointer — normally the left,
+    /// but the right when the panel already sits against the right of the
+    /// screen (Maccy's slideout picks the side with room the same way). The
+    /// choice sticks until the next growth so a later collapse shrinks from
+    /// the same side, and left-anchored growth clamps to the screen edge.
+    /// Width changes animate; height changes stay instant.
+    private enum WidthAnchor { case left, right }
+    private var widthAnchor: WidthAnchor = .left
+
     func resizeToFitContent() {
         let newSize = model.desiredWindowSize
         let current = panel.frame
         guard abs(current.width - newSize.width) > 0.5 || abs(current.height - newSize.height) > 0.5 else { return }
-        let newFrame = NSRect(x: current.minX + (current.width - newSize.width) / 2,
-                              y: current.maxY - newSize.height,
-                              width: newSize.width,
-                              height: newSize.height)
-        panel.setFrame(newFrame, display: true)
+        let screenMaxX = panel.screen?.visibleFrame.maxX ?? current.maxX
+        if newSize.width > current.width {
+            widthAnchor = current.maxX >= screenMaxX - 60 ? .right : .left
+        }
+        var x = current.minX
+        var width = newSize.width
+        if widthAnchor == .right {
+            x = current.maxX - width
+        } else if x + width > screenMaxX - 24 {
+            width = max(current.width, screenMaxX - 24 - x)
+        }
+        let newFrame = NSRect(x: x, y: current.maxY - newSize.height, width: width, height: newSize.height)
+        panel.setFrame(newFrame, display: true,
+                       animate: abs(newSize.width - current.width) > 0.5)
     }
 
     // MARK: keyboard
@@ -243,6 +268,13 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     private func handleKeyDown(_ event: NSEvent) -> NSEvent? {
+        // Esc over the image viewer dismisses just the viewer; the launcher
+        // panel stays key (the viewer never takes key status).
+        if imageViewer.isVisible, event.keyCode == 53 {
+            imageViewer.close(reason: "esc")
+            return nil
+        }
+
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         let cmd = flags.contains(.command)
         let ctrl = flags.contains(.control)
@@ -364,6 +396,10 @@ final class PanelController: NSObject, NSWindowDelegate {
         for (index, window) in NSApp.windows.enumerated() where window.isVisible && window.frame.width > 1 && window.windowNumber > 0 {
             let label = window == panel ? "panel" : "win\(index)"
             captureWindow(window, to: URL(fileURLWithPath: "/tmp/heycast_\(label).png"))
+        }
+        // Child windows (the image viewer) don't appear in NSApp.windows.
+        for window in panel.childWindows ?? [] {
+            captureWindow(window, to: URL(fileURLWithPath: "/tmp/heycast_viewer.png"))
         }
     }
 

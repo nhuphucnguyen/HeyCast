@@ -107,6 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                model.filteredClipboardItems.indices.contains(model.selectedIndex) {
                 model.toggleClipboardPin(model.filteredClipboardItems[model.selectedIndex])
             }
+        case "preview":
+            // Same as clicking the image preview / the magnifier button:
+            // toggles the full-size viewer for the selected clipboard entry.
+            if model.page == .clipboard {
+                model.onShowImageViewer?()
+            }
         case "enter":
             // Same as pressing return on the highlighted row (routes
             // "@alias question" on the main page too).

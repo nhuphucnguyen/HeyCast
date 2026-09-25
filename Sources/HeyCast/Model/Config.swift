@@ -113,6 +113,7 @@ struct Config: Codable, Equatable {
     var showOnStartup: Bool = false
     var clipboardHistoryEnabled: Bool = true
     var clipboardPasteOnSelect: Bool = false
+    var clipboardImagePreviewPopOut: Bool = true
     var clipboardCapturePaused: Bool = false
     var clipboardHistorySize: Int = 200
     var shells: [ShellCommandConfig] = []
@@ -151,6 +152,7 @@ struct Config: Codable, Equatable {
         if let v = try c.decodeIfPresent(Bool.self, forKey: .showOnStartup) { showOnStartup = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardHistoryEnabled) { clipboardHistoryEnabled = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardPasteOnSelect) { clipboardPasteOnSelect = v }
+        if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardImagePreviewPopOut) { clipboardImagePreviewPopOut = v }
         if let v = try c.decodeIfPresent(Bool.self, forKey: .clipboardCapturePaused) { clipboardCapturePaused = v }
         if let v = try c.decodeIfPresent(Int.self, forKey: .clipboardHistorySize), (10...1000).contains(v) { clipboardHistorySize = v }
         if let v = try c.decodeIfPresent([ShellCommandConfig].self, forKey: .shells) { shells = v }

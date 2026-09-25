@@ -22,6 +22,11 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var emojiResults: [EmojiEntry] = []
     @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
+    @Published private(set) var clipboardPreviewPoppedOut = false
+    /// True for the split second while hover moves the clipboard selection —
+    /// see hoverSelectClipboardRow(_:).
+    @Published var clipboardSelectionFromHover = false
+    private var clipboardPopOutTask: Task<Void, Never>?
     /// Image pasted with ⌘V (or auto-attached from the clipboard) that rides
     /// along with the next agent question.
     @Published var pendingImage: Data? = nil
@@ -57,6 +62,7 @@ final class LauncherModel: ObservableObject {
     var onOpenSettings: (() -> Void)?
     var onLayoutChanged: (() -> Void)?
     var onAssistantUnread: ((Int) -> Void)?
+    var onShowImageViewer: (() -> Void)?
     private var shellHotkeys: [Shortcut: ShellCommandConfig] = [:]
     /// Last shortcut that parsed *and* registered for each config hotkey —
     /// an invalid config value falls back to these instead of leaving the
@@ -126,13 +132,18 @@ final class LauncherModel: ObservableObject {
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
+        clipboardPopOutTask?.cancel()
+        setClipboardPopOut(false)
         refreshResults()
+        updateClipboardPopOut()
         panelIsVisible = true
         onShowPanel?()
     }
 
     func hide() {
         panelIsVisible = false
+        clipboardPopOutTask?.cancel()
+        setClipboardPopOut(false)
         if config.restoreInputSourceOnClose, let saved = savedInputSource {
             _ = InputSourceService.select(sourceID: saved)
             savedInputSource = nil
@@ -152,6 +163,7 @@ final class LauncherModel: ObservableObject {
         selectedIndex = 0
         clipboardPreviewIndex = nil
         refreshResults()
+        updateClipboardPopOut()
         onLayoutChanged?()
     }
 
@@ -181,6 +193,7 @@ final class LauncherModel: ObservableObject {
     }
 
     func moveSelection(_ delta: Int) {
+        clipboardSelectionFromHover = false
         let count = maxSelection
         guard count > 0 else { return }
         var next = selectedIndex + delta
@@ -190,6 +203,52 @@ final class LauncherModel: ObservableObject {
         if page == .clipboard {
             clipboardPreviewIndex = filteredClipboardItems.indices.contains(selectedIndex) ? selectedIndex : nil
         }
+        updateClipboardPopOut()
+    }
+
+    /// Mouse hover over a clipboard row moves the selection so the preview
+    /// follows the pointer. Marks the change hover-originated: the list then
+    /// skips scroll-to-selection, because a stationary cursor must not push
+    /// the list around (centering an item scrolls other rows under the
+    /// cursor, which would re-trigger hover and loop).
+    func hoverSelectClipboardRow(_ index: Int) {
+        guard filteredClipboardItems.indices.contains(index), index != selectedIndex else { return }
+        clipboardSelectionFromHover = true
+        selectedIndex = index
+        clipboardPreviewIndex = index
+        updateClipboardPopOut()
+    }
+
+    /// The entry the preview pane (and the full-size image viewer) shows.
+    var selectedClipboardEntry: ClipboardEntry? {
+        filteredClipboardItems.indices.contains(selectedIndex)
+            ? filteredClipboardItems[selectedIndex]
+            : nil
+    }
+
+    /// Maccy's slideout, adapted: when the clipboard selection rests on an
+    /// image, the panel widens so the preview pane becomes a large image
+    /// surface; moving to a text/URL entry slides it back. Debounced, so
+    /// sweeping the pointer across mixed rows doesn't thrash the window.
+    private func updateClipboardPopOut() {
+        guard config.clipboardImagePreviewPopOut, page == .clipboard,
+              selectedClipboardEntry?.kind == .image else {
+            clipboardPopOutTask?.cancel()
+            setClipboardPopOut(false)
+            return
+        }
+        clipboardPopOutTask?.cancel()
+        clipboardPopOutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
+            self?.setClipboardPopOut(true)
+        }
+    }
+
+    private func setClipboardPopOut(_ popped: Bool) {
+        guard clipboardPreviewPoppedOut != popped else { return }
+        clipboardPreviewPoppedOut = popped
+        onLayoutChanged?()
     }
 
     func openFocused() {
@@ -252,6 +311,8 @@ final class LauncherModel: ObservableObject {
         case .clipboard:
             selectedIndex = 0
             clipboardPreviewIndex = nil
+            clipboardSelectionFromHover = false
+            updateClipboardPopOut()
         case .assistant:
             selectedIndex = 0
         }
@@ -730,6 +791,9 @@ final class LauncherModel: ObservableObject {
             clipboardItems.removeLast(clipboardItems.count - config.clipboardHistorySize)
         }
         clipboardStore.prune(keep: config.clipboardHistorySize)
+        // A capture re-sorts the list under the selection, so the selected
+        // entry may no longer be an image — the slideout must follow.
+        updateClipboardPopOut()
     }
 
     /// Canonical clipboard order: pinned entries first (Maccy), then by copy
@@ -967,7 +1031,11 @@ final class LauncherModel: ObservableObject {
     // MARK: - layout
 
     static let windowWidth: CGFloat = 550
-    static let clipboardWindowWidth: CGFloat = 620
+    static let clipboardWindowWidth: CGFloat = 720
+    /// Extra width the panel gains while the clipboard image preview has
+    /// popped out (Maccy's slideout), clamped to the screen in
+    /// popOutWidthThatFits.
+    static let clipboardPopOutWidth: CGFloat = 620
     static let searchHeaderHeight: CGFloat = 56
     static let rowHeight: CGFloat = 48
     static let footerHeight: CGFloat = 26
@@ -989,7 +1057,9 @@ final class LauncherModel: ObservableObject {
             let height = Self.chromePadding + Self.searchHeaderHeight + gridHeight + Self.footerHeight + Self.chromePadding / 2
             return NSSize(width: Self.windowWidth, height: height)
         case .clipboard:
-            return NSSize(width: Self.clipboardWindowWidth, height: 480)
+            let width = Self.clipboardWindowWidth
+                + (clipboardPreviewPoppedOut ? popOutWidthThatFits : 0)
+            return NSSize(width: width, height: 640)
         case .assistant:
             // Reading page: use generous horizontal space (60% of the screen,
             // clamped) so long responses stay readable.
@@ -997,6 +1067,13 @@ final class LauncherModel: ObservableObject {
             let width = min(1080, max(Self.clipboardWindowWidth, screenWidth * 0.6))
             return NSSize(width: width, height: 500)
         }
+    }
+
+    /// Pop-out width clamped so the widened panel still fits the screen with
+    /// a margin (the resize logic anchors the panel to one of its edges).
+    private var popOutWidthThatFits: CGFloat {
+        let available = (NSScreen.main?.visibleFrame.width ?? 1280) - Self.clipboardWindowWidth - 40
+        return min(Self.clipboardPopOutWidth, max(280, available))
     }
 
     var footerText: String {

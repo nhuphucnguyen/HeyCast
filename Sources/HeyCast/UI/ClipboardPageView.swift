@@ -26,6 +26,12 @@ struct ClipboardPageView: View {
                                     ClipboardRow(model: model, entry: entry, index: index,
                                                  isSelected: index == model.selectedIndex)
                                         .id(entry.id)
+                                        .onHover { hovering in
+                                            // Selecting on hover makes the preview follow
+                                            // the pointer; click still chooses the entry.
+                                            guard hovering else { return }
+                                            model.hoverSelectClipboardRow(index)
+                                        }
                                         .onTapGesture {
                                             model.selectedIndex = index
                                             model.openFocused()
@@ -35,6 +41,12 @@ struct ClipboardPageView: View {
                         }
                         .onChange(of: model.selectedIndex) { newIndex in
                             guard items.indices.contains(newIndex) else { return }
+                            // Hover-driven changes must not scroll: see
+                            // hoverSelectClipboardRow(_:).
+                            if model.clipboardSelectionFromHover {
+                                model.clipboardSelectionFromHover = false
+                                return
+                            }
                             withAnimation(.easeOut(duration: 0.1)) {
                                 proxy.scrollTo(items[newIndex].id, anchor: .center)
                             }
@@ -51,7 +63,6 @@ struct ClipboardPageView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(.horizontal, 12)
-        .frame(height: 330)
     }
 
     @ViewBuilder
@@ -59,26 +70,28 @@ struct ClipboardPageView: View {
         let selected = items.indices.contains(model.selectedIndex) ? items[model.selectedIndex] : nil
         VStack(alignment: .leading, spacing: 8) {
             if let selected {
-                ScrollView {
-                    Group {
-                        switch selected.kind {
-                        case .image:
-                            if let data = selected.imageData, let image = NSImage(data: data) {
-                                Image(nsImage: image)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(maxWidth: .infinity)
-                            } else {
-                                Text("Unreadable image")
-                                    .foregroundStyle(model.theme.textColor.alpha(0.5))
-                            }
-                        case .text, .url:
-                            Text(selected.text ?? "")
-                                .font(model.theme.font(.body))
-                                .foregroundStyle(model.theme.textColor)
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                switch selected.kind {
+                case .image:
+                    // Fill the pane (no ScrollView — a screenshot should use
+                    // every point of it); click opens the full-size viewer.
+                    if let data = selected.imageData, let image = NSImage(data: data) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.onShowImageViewer?() }
+                    } else {
+                        Text("Unreadable image")
+                            .foregroundStyle(model.theme.textColor.alpha(0.5))
+                    }
+                case .text, .url:
+                    ScrollView {
+                        Text(selected.text ?? "")
+                            .font(model.theme.font(.body))
+                            .foregroundStyle(model.theme.textColor)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .padding(8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(.ultraThinMaterial))
@@ -92,6 +105,15 @@ struct ClipboardPageView: View {
                         }
                         .buttonStyle(.plain)
                         .help("Open URL")
+                    }
+                    if selected.kind == .image {
+                        Button {
+                            model.onShowImageViewer?()
+                        } label: {
+                            Image(systemName: "plus.magnifyingglass")
+                        }
+                        .buttonStyle(.plain)
+                        .help("View full size")
                     }
                     Button {
                         model.toggleClipboardPin(selected)

@@ -185,6 +185,8 @@ struct SettingsView: View {
                 hotkeyValidation(for: draft.clipboardHotkey)
                 Toggle("Paste into previous app on select", isOn: $draft.clipboardPasteOnSelect)
                     .onChange(of: draft.clipboardPasteOnSelect) { _ in persist() }
+                Toggle("Pop out preview when an image is selected", isOn: $draft.clipboardImagePreviewPopOut)
+                    .onChange(of: draft.clipboardImagePreviewPopOut) { _ in persist() }
             }
         }
         .formStyle(.grouped)
