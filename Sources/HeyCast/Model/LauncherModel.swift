@@ -167,17 +167,12 @@ final class LauncherModel: ObservableObject {
         onLayoutChanged?()
     }
 
+    /// Esc dismisses the launcher entirely, from any page and regardless of
+    /// query text. The clipboard/emoji/files pages are transient modes, not
+    /// levels of a hierarchy — there is no "back" to go to; their hotkeys or
+    /// the next toggle bring the launcher back (on the main page).
     func escPressed() {
-        if !query.isEmpty {
-            query = ""
-        } else if page == .assistant {
-            // From the inbox/loading view, Esc means "back to work".
-            hide()
-        } else if page != .main {
-            switchPage(.main)
-        } else {
-            hide()
-        }
+        hide()
     }
 
     // MARK: - selection
