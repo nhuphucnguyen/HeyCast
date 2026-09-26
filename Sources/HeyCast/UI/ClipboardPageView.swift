@@ -171,10 +171,28 @@ private struct ClipboardRow: View {
         HStack(spacing: 8) {
             rowIcon
                 .frame(width: 16, height: 16)
-            Text(entry.preview)
-                .font(model.theme.font(.body))
-                .foregroundStyle(model.theme.textColor)
-                .lineLimit(1)
+            if entry.kind == .image, let thumbnail = ClipboardThumbnails.image(for: entry) {
+                // The thumbnail replaces the "Image" label — a visual is what
+                // lets you spot the right screenshot in the list. Rows stay
+                // at the fixed text-row height, so the image fills the
+                // available width and center-crops vertically (scaledToFill
+                // + clip) rather than shrinking to fit the height.
+                Image(nsImage: thumbnail)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(model.theme.textColor.alpha(0.15))
+                    )
+            } else {
+                Text(entry.preview)
+                    .font(model.theme.font(.body))
+                    .foregroundStyle(model.theme.textColor)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 0)
             // Maccy-style hint: the first nine entries respond to ⌘1…⌘9.
             if index < 9 {
@@ -239,5 +257,31 @@ enum ClipboardSourceIcons {
         icon.size = NSSize(width: 15, height: 15)
         cache.setObject(icon, forKey: bundleID as NSString)
         return icon
+    }
+}
+
+/// Small row thumbnails for image entries, cached per entry id. Content is
+/// immutable per id (a re-copy dedupes into the same row), so a cached
+/// thumbnail can never outlive its content. Decoded at 240px — enough for
+/// the row slot at up to 3x display scale.
+enum ClipboardThumbnails {
+    private static let cache = NSCache<NSNumber, NSImage>()
+
+    static func image(for entry: ClipboardEntry) -> NSImage? {
+        guard let data = entry.imageData else { return nil }
+        let key = NSNumber(value: entry.id)
+        if let hit = cache.object(forKey: key) { return hit }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 480,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        let thumbnail = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+        cache.setObject(thumbnail, forKey: key)
+        return thumbnail
     }
 }
