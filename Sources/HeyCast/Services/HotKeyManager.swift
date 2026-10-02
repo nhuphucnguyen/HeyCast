@@ -201,15 +201,25 @@ final class HotKeyManager {
     private var installed = false
     var onHotKey: ((Shortcut) -> Void)?
 
-    /// Swaps the active hotkey set. Each shortcut registers independently:
-    /// a combo another process refuses to release only drops that one
-    /// hotkey — the rest (crucially the toggle) still go live, and every
-    /// failure is reported back.
+    /// Swaps the active hotkey set. Shortcuts already registered stay
+    /// registered (re-registering a combo this process holds fails with
+    /// eventHotKeyExistsErr, so any unrelated config change would otherwise
+    /// drop every hotkey); removed ones are released before new ones are
+    /// added. Each new shortcut registers independently: a combo another
+    /// process refuses to release only drops that one hotkey — the rest
+    /// (crucially the toggle) still go live, and every failure is reported
+    /// back.
     @discardableResult
     func update(shortcuts: [Shortcut]) -> [RegistrationFailure] {
         installHandlerIfNeeded()
-        var seen = Set<Shortcut>()
-        var fresh: [Registration] = []
+        let wanted = Set(shortcuts)
+        for reg in registrations where !wanted.contains(reg.shortcut) {
+            if let ref = reg.hotKeyRef {
+                UnregisterEventHotKey(ref)
+            }
+        }
+        var kept = registrations.filter { wanted.contains($0.shortcut) }
+        var seen = Set(kept.map(\.shortcut))
         var failures: [RegistrationFailure] = []
         for shortcut in shortcuts where !seen.contains(shortcut) {
             seen.insert(shortcut)
@@ -230,21 +240,11 @@ final class HotKeyManager {
                 failures.append(RegistrationFailure(shortcut: shortcut, status: status))
                 continue
             }
-            fresh.append(Registration(shortcut: shortcut, id: id, hotKeyRef: ref))
+            kept.append(Registration(shortcut: shortcut, id: id, hotKeyRef: ref))
         }
-        unregisterAll()
-        registrations = fresh
-        NSLog("HeyCast: active hotkeys — %@", fresh.map(\.shortcut.displayString).joined(separator: ", "))
+        registrations = kept
+        NSLog("HeyCast: active hotkeys — %@", kept.map(\.shortcut.displayString).joined(separator: ", "))
         return failures
-    }
-
-    private func unregisterAll() {
-        for reg in registrations {
-            if let ref = reg.hotKeyRef {
-                UnregisterEventHotKey(ref)
-            }
-        }
-        registrations.removeAll()
     }
 
     private func installHandlerIfNeeded() {

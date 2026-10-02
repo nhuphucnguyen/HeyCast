@@ -42,7 +42,14 @@ final class LauncherModel: ObservableObject {
     var config: Config {
         didSet {
             theme = Theme.resolve(config: config, systemDark: systemDark)
-            applyHotkeys()
+            // Only hotkey settings touch the global registrations — changing
+            // e.g. window position must not re-register anything.
+            if config.toggleHotkey != oldValue.toggleHotkey
+                || config.clipboardHotkey != oldValue.clipboardHotkey
+                || config.clipboardHistoryEnabled != oldValue.clipboardHistoryEnabled
+                || config.shells != oldValue.shells {
+                applyHotkeys()
+            }
         }
     }
     var ranking: RankingStore {
