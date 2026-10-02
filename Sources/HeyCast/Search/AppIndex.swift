@@ -1,9 +1,9 @@
 import AppKit
-import UniformTypeIdentifiers
 
-/// Discovers installed applications via LaunchServices and provides icon
-/// caching. Uses the public NSWorkspace API first, with a filesystem scan of
-/// the standard app directories as fallback.
+/// Discovers installed applications by scanning the standard app
+/// directories and provides icon caching. Cheap enough (~10ms warm) to rerun
+/// every time the panel opens, so newly installed apps show up without a
+/// manual reload.
 final class AppIndex {
     struct Entry {
         let name: String
@@ -17,6 +17,9 @@ final class AppIndex {
 
     var searchNames: [String] { apps.map(\.searchName) }
 
+    /// Rescans on a background queue. `completion` runs on the main queue,
+    /// and only when the app list actually changed — an unchanged rescan
+    /// leaves `apps` alone so results the user is typing into don't refresh.
     func load(blacklist: [String], completion: (() -> Void)? = nil) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let discovered = Self.discoverApps()
@@ -29,8 +32,13 @@ final class AppIndex {
                 return Entry(name: name, searchName: lower, path: path, icon: Self.icon(for: path))
             }
             entries.forEach { $0.icon.size = NSSize(width: 32, height: 32) }
+            let sorted = entries.sorted { $0.name < $1.name }
             DispatchQueue.main.async {
-                self?.apps = entries.sorted { $0.name < $1.name }
+                guard let self else { return }
+                let changed = sorted.map(\.path) != self.apps.map(\.path)
+                    || sorted.map(\.name) != self.apps.map(\.name)
+                guard changed else { return }
+                self.apps = sorted
                 completion?()
             }
         }
@@ -55,22 +63,26 @@ final class AppIndex {
 
     // MARK: discovery
 
+    /// Apps directly in the standard app directories, plus one folder level
+    /// down (/Applications/Utilities, vendor folders like
+    /// /Applications/Bitdefender). Reads the filesystem directly rather than
+    /// LaunchServices or Spotlight, which can lag behind a fresh install.
     static func discoverApps() -> [String] {
+        let fm = FileManager.default
         var paths = Set<String>()
-        if let appType = UTType("com.apple.application-bundle") {
-            for url in NSWorkspace.shared.urlsForApplications(toOpen: appType)
-            where url.pathExtension == "app" {
-                paths.insert(url.path)
-            }
-        }
-        if paths.count < 10 {
-            // Fallback: scan standard locations.
-            let scanRoots = ["/Applications", "/System/Applications",
-                             NSString(string: "~/Applications").expandingTildeInPath]
-            for root in scanRoots {
-                let contents = (try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []
-                for item in contents where item.hasSuffix(".app") {
-                    paths.insert(root + "/" + item)
+        let scanRoots = ["/Applications", "/System/Applications",
+                         NSString(string: "~/Applications").expandingTildeInPath]
+        for root in scanRoots {
+            for item in (try? fm.contentsOfDirectory(atPath: root)) ?? [] {
+                let path = root + "/" + item
+                if item.hasSuffix(".app") {
+                    paths.insert(path)
+                    continue
+                }
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { continue }
+                for sub in (try? fm.contentsOfDirectory(atPath: path)) ?? [] where sub.hasSuffix(".app") {
+                    paths.insert(path + "/" + sub)
                 }
             }
         }

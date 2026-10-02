@@ -140,6 +140,12 @@ final class LauncherModel: ObservableObject {
         setClipboardPopOut(false)
         refreshResults()
         updateClipboardPopOut()
+        // Pick up apps installed/removed since the last scan. Runs off the
+        // main thread; results refresh only if the list changed.
+        appIndex.load(blacklist: config.blacklist) { [weak self] in
+            guard let self, self.page == .main else { return }
+            self.refreshResults()
+        }
         panelIsVisible = true
         onShowPanel?()
     }
