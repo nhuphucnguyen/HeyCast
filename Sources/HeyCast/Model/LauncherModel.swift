@@ -27,6 +27,9 @@ final class LauncherModel: ObservableObject {
     /// see hoverSelectClipboardRow(_:).
     @Published var clipboardSelectionFromHover = false
     private var clipboardPopOutTask: Task<Void, Never>?
+    /// Pending hover selection — see hoverSelectClipboardRow(_:).
+    private var clipboardHoverTask: Task<Void, Never>?
+    private var clipboardHoverIndex: Int?
     /// Image pasted with ⌘V (or auto-attached from the clipboard) that rides
     /// along with the next agent question.
     @Published var pendingImage: Data? = nil
@@ -132,6 +135,7 @@ final class LauncherModel: ObservableObject {
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
+        cancelClipboardHover()
         clipboardPopOutTask?.cancel()
         setClipboardPopOut(false)
         refreshResults()
@@ -142,6 +146,7 @@ final class LauncherModel: ObservableObject {
 
     func hide() {
         panelIsVisible = false
+        cancelClipboardHover()
         clipboardPopOutTask?.cancel()
         setClipboardPopOut(false)
         if config.restoreInputSourceOnClose, let saved = savedInputSource {
@@ -188,6 +193,7 @@ final class LauncherModel: ObservableObject {
     }
 
     func moveSelection(_ delta: Int) {
+        cancelClipboardHover()
         clipboardSelectionFromHover = false
         let count = maxSelection
         guard count > 0 else { return }
@@ -206,12 +212,35 @@ final class LauncherModel: ObservableObject {
     /// skips scroll-to-selection, because a stationary cursor must not push
     /// the list around (centering an item scrolls other rows under the
     /// cursor, which would re-trigger hover and loop).
+    ///
+    /// Delayed until the pointer rests on the row, so sweeping across the
+    /// list toward a far row doesn't load a preview for every row passed.
     func hoverSelectClipboardRow(_ index: Int) {
-        guard filteredClipboardItems.indices.contains(index), index != selectedIndex else { return }
-        clipboardSelectionFromHover = true
-        selectedIndex = index
-        clipboardPreviewIndex = index
-        updateClipboardPopOut()
+        clipboardHoverTask?.cancel()
+        clipboardHoverIndex = index
+        clipboardHoverTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.clipboardHoverIndex = nil
+            guard self.filteredClipboardItems.indices.contains(index), index != self.selectedIndex else { return }
+            self.clipboardSelectionFromHover = true
+            self.selectedIndex = index
+            self.clipboardPreviewIndex = index
+            self.updateClipboardPopOut()
+        }
+    }
+
+    /// Pointer left a row: drop its pending hover selection (if a newer row
+    /// hasn't already replaced it).
+    func hoverExitClipboardRow(_ index: Int) {
+        guard clipboardHoverIndex == index else { return }
+        cancelClipboardHover()
+    }
+
+    private func cancelClipboardHover() {
+        clipboardHoverTask?.cancel()
+        clipboardHoverTask = nil
+        clipboardHoverIndex = nil
     }
 
     /// The entry the preview pane (and the full-size image viewer) shows.
@@ -306,6 +335,7 @@ final class LauncherModel: ObservableObject {
         case .clipboard:
             selectedIndex = 0
             clipboardPreviewIndex = nil
+            cancelClipboardHover()
             clipboardSelectionFromHover = false
             updateClipboardPopOut()
         case .assistant:

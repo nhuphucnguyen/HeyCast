@@ -29,10 +29,14 @@ struct ClipboardPageView: View {
                                         .onHover { hovering in
                                             // Selecting on hover makes the preview follow
                                             // the pointer; click still chooses the entry.
-                                            guard hovering else { return }
-                                            model.hoverSelectClipboardRow(index)
+                                            if hovering {
+                                                model.hoverSelectClipboardRow(index)
+                                            } else {
+                                                model.hoverExitClipboardRow(index)
+                                            }
                                         }
                                         .onTapGesture {
+                                            model.hoverExitClipboardRow(index)
                                             model.selectedIndex = index
                                             model.openFocused()
                                         }
