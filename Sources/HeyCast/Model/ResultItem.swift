@@ -6,6 +6,7 @@ enum Page: String, CaseIterable {
     case clipboard
     case emoji
     case assistant
+    case uninstall
 }
 
 enum ResultIcon {

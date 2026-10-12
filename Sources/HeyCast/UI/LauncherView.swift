@@ -82,6 +82,7 @@ struct LauncherView: View {
         case .emoji: return true
         case .clipboard: return true
         case .assistant: return true
+        case .uninstall: return true
         }
     }
 
@@ -90,7 +91,8 @@ struct LauncherView: View {
             Image(systemName: pageIcon)
                 .foregroundStyle(model.theme.textColor.alpha(0.5))
                 .font(.system(size: 15))
-            TextField(model.config.placeholder, text: $model.query)
+            TextField(model.page == .uninstall ? "Filter files and folders…" : model.config.placeholder,
+                      text: $model.query)
                 .focused($searchFocused)
                 .textFieldStyle(.plain)
                 .font(Font(model.theme.uiFont(size: 19)))
@@ -121,6 +123,7 @@ struct LauncherView: View {
         case .clipboard: return "clipboard"
         case .emoji: return "face.smiling"
         case .assistant: return "sparkles"
+        case .uninstall: return "trash"
         }
     }
 
@@ -132,6 +135,7 @@ struct LauncherView: View {
         case .emoji: EmojiGridView(model: model)
         case .clipboard: ClipboardPageView(model: model)
         case .assistant: AssistantPageView(model: model)
+        case .uninstall: UninstallPageView(model: model)
         }
     }
 
@@ -201,6 +205,7 @@ struct LauncherView: View {
         case .clipboard: return "Clipboard"
         case .emoji: return "Emoji"
         case .assistant: return "Assistant"
+        case .uninstall: return model.uninstallTarget.map { "Uninstall \($0.name)" } ?? "Uninstall"
         }
     }
 }
@@ -243,6 +248,31 @@ struct ResultRow: View {
                 model.selectedIndex = index
             }
             model.openResult(item)
+        }
+        .contextMenu { contextMenuItems }
+    }
+
+    /// Right-click actions. Apps get Raycast's set, ending in Uninstall.
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        if case let .launchApp(url, _) = item.action {
+            Button("Open") { model.openResult(item) }
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+                model.hide()
+            }
+            Button("Copy Path") { model.copyText(url.path) }
+            if item.searchName != nil {
+                Button(item.favorite ? "Remove from Favourites" : "Add to Favourites") {
+                    model.toggleFavorite(item)
+                }
+            }
+            Divider()
+            Button("Uninstall…", role: .destructive) {
+                model.beginUninstall(appPath: url.path)
+            }
+        } else {
+            Button("Open") { model.openResult(item) }
         }
     }
 

@@ -97,6 +97,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !model.panelIsVisible { model.show() }
                 model.query = text.removingPercentEncoding ?? text
             }
+        case "uninstall":
+            // heycast://uninstall?path=/Applications/Foo.app — opens the
+            // uninstall page (same as right-click → Uninstall…). Nothing is
+            // trashed until the user confirms.
+            let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+            if let path = params.first(where: { $0.name == "path" })?.value {
+                if !model.panelIsVisible { model.show() }
+                model.beginUninstall(appPath: path)
+            }
         case "down":
             model.moveSelection(1)
         case "up":

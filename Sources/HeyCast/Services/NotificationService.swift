@@ -38,6 +38,19 @@ final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
+    /// A plain informational notification (no click action).
+    func postInfo(title: String, body: String) {
+        Task { [weak self] in
+            guard let self, await self.requestAccess() else { return }
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            let request = UNNotificationRequest(identifier: "info-\(Int(Date().timeIntervalSince1970 * 1000))",
+                                                content: content, trigger: nil)
+            try? await UNUserNotificationCenter.current().add(request)
+        }
+    }
+
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
                                            didReceive response: UNNotificationResponse) async {
         guard let id = response.notification.request.content.userInfo["assistantMessageID"] as? Int64 else {

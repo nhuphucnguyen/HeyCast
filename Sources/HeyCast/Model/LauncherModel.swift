@@ -190,6 +190,10 @@ final class LauncherModel: ObservableObject {
     /// levels of a hierarchy — there is no "back" to go to; their hotkeys or
     /// the next toggle bring the launcher back (on the main page).
     func escPressed() {
+        if page == .uninstall, uninstallConfirming {
+            uninstallConfirming = false
+            return
+        }
         hide()
     }
 
@@ -202,6 +206,7 @@ final class LauncherModel: ObservableObject {
         case .files: return fileResults.count
         case .assistant: return assistantMessages.count
         case .main: return results.count
+        case .uninstall: return filteredUninstallItems.count
         }
     }
 
@@ -313,6 +318,12 @@ final class LauncherModel: ObservableObject {
             } else if assistantMessages.indices.contains(selectedIndex) {
                 openAssistantMessage(assistantMessages[selectedIndex])
             }
+        case .uninstall:
+            if uninstallConfirming {
+                confirmUninstall()
+            } else {
+                toggleUninstallItem(at: selectedIndex)
+            }
         }
     }
 
@@ -351,7 +362,7 @@ final class LauncherModel: ObservableObject {
             cancelClipboardHover()
             clipboardSelectionFromHover = false
             updateClipboardPopOut()
-        case .assistant:
+        case .assistant, .uninstall:
             selectedIndex = 0
         }
         onLayoutChanged?()
@@ -795,6 +806,169 @@ final class LauncherModel: ObservableObject {
         }
     }
 
+    // MARK: - uninstall
+
+    @Published private(set) var uninstallTarget: AppUninstaller.Target?
+    @Published private(set) var uninstallItems: [AppUninstaller.Item] = []
+    @Published private(set) var uninstallLoading = false
+    /// The "Move N items to the Trash?" step — Enter confirms, Esc backs out.
+    @Published private(set) var uninstallConfirming = false
+    @Published private(set) var uninstallInProgress = false
+    @Published private(set) var uninstallMessage: String?
+    private var uninstallScanTask: Task<Void, Never>?
+
+    var filteredUninstallItems: [AppUninstaller.Item] {
+        let q = query.lowercased()
+        guard !q.isEmpty else { return uninstallItems }
+        return uninstallItems.filter { $0.name.lowercased().contains(q) || $0.path.lowercased().contains(q) }
+    }
+
+    var uninstallTargetIsRunning: Bool {
+        uninstallTarget.map { !AppUninstaller.runningInstances(of: $0).isEmpty } ?? false
+    }
+
+    /// Opens the uninstall page for an app: the bundle plus every leftover
+    /// file found, all checked, sizes filling in as they're measured.
+    func beginUninstall(appPath: String) {
+        uninstallScanTask?.cancel()
+        uninstallItems = []
+        uninstallConfirming = false
+        uninstallInProgress = false
+        uninstallMessage = nil
+        uninstallTarget = AppUninstaller.Target(appPath: appPath)
+        switchPage(.uninstall)
+
+        guard let target = uninstallTarget else {
+            uninstallMessage = "The app is no longer at \(FileSearchService.displayPath(appPath))."
+            return
+        }
+        if AppUninstaller.isProtected(target) {
+            uninstallMessage = AppUninstaller.UninstallError.protectedApp(target.name).errorDescription
+            return
+        }
+        uninstallLoading = true
+        uninstallScanTask = Task { [weak self] in
+            let items = await Task.detached(priority: .userInitiated) {
+                AppUninstaller.findFiles(for: target)
+            }.value
+            guard let self, !Task.isCancelled else { return }
+            self.uninstallItems = items
+            self.uninstallLoading = false
+            self.onLayoutChanged?()
+            await self.measureUninstallSizes(items.map(\.path))
+        }
+    }
+
+    private func measureUninstallSizes(_ paths: [String]) async {
+        // A few at a time: a big Application Support folder shouldn't hold
+        // up the sizes of the small files listed after it.
+        for chunk in stride(from: 0, to: paths.count, by: 4).map({ Array(paths[$0..<min($0 + 4, paths.count)]) }) {
+            let sizes = await withTaskGroup(of: (String, Int64?).self) { group in
+                for path in chunk {
+                    group.addTask(priority: .utility) { (path, AppUninstaller.size(of: path)) }
+                }
+                var out: [String: Int64] = [:]
+                for await (path, size) in group { out[path] = size }
+                return out
+            }
+            guard !Task.isCancelled else { return }
+            for (path, size) in sizes {
+                if let i = uninstallItems.firstIndex(where: { $0.path == path }) {
+                    uninstallItems[i].size = size
+                }
+            }
+        }
+    }
+
+    /// Index is into filteredUninstallItems (what the list shows).
+    func toggleUninstallItem(at index: Int) {
+        guard !uninstallInProgress else { return }
+        let visible = filteredUninstallItems
+        guard visible.indices.contains(index),
+              let i = uninstallItems.firstIndex(where: { $0.path == visible[index].path }) else { return }
+        uninstallItems[i].isSelected.toggle()
+        uninstallConfirming = false
+    }
+
+    func requestUninstall() {
+        guard page == .uninstall, !uninstallInProgress, !uninstallLoading else { return }
+        guard uninstallItems.contains(where: \.isSelected) else {
+            HapticsService.failure(enabled: config.hapticFeedback)
+            return
+        }
+        uninstallMessage = nil
+        uninstallConfirming = true
+    }
+
+    func cancelUninstallConfirm() {
+        uninstallConfirming = false
+    }
+
+    /// Quits the app if it's running, then trashes every checked item.
+    /// Root-owned items go through Finder, whose password prompt takes focus
+    /// and hides the panel — the outcome is also posted as a notification.
+    func confirmUninstall() {
+        guard let target = uninstallTarget, uninstallConfirming, !uninstallInProgress else { return }
+        let paths = uninstallItems.filter(\.isSelected).map(\.path)
+        let freed = uninstallItems.filter(\.isSelected).compactMap(\.size).reduce(0, +)
+        uninstallConfirming = false
+        uninstallInProgress = true
+        uninstallScanTask?.cancel()
+
+        Task { [weak self] in
+            if !AppUninstaller.runningInstances(of: target).isEmpty,
+               !(await AppUninstaller.quit(target)) {
+                self?.finishUninstall(target: target, failed: nil, freed: 0,
+                                      error: AppUninstaller.UninstallError.stillRunning(target.name).errorDescription)
+                return
+            }
+            let failed = await Task.detached(priority: .userInitiated) {
+                AppUninstaller.moveToTrash(paths)
+            }.value
+            self?.finishUninstall(target: target, failed: failed, freed: freed, error: nil)
+        }
+    }
+
+    private func finishUninstall(target: AppUninstaller.Target, failed: [String]?, freed: Int64, error: String?) {
+        uninstallInProgress = false
+        appIndex.load(blacklist: config.blacklist) { [weak self] in
+            guard let self, self.page == .main else { return }
+            self.refreshResults()
+        }
+
+        let title: String
+        let body: String
+        if let error {
+            title = "Couldn't uninstall \(target.name)"
+            body = error
+        } else if let failed, !failed.isEmpty {
+            title = "\(target.name) partly uninstalled"
+            body = failed.count == 1
+                ? "1 item couldn't be moved to the Trash."
+                : "\(failed.count) items couldn't be moved to the Trash."
+            // Keep only what's still there, so the user can retry or
+            // reveal it in Finder.
+            let remaining = Set(failed)
+            uninstallItems.removeAll { $0.isSelected && !remaining.contains($0.path) }
+        } else {
+            title = "Uninstalled \(target.name)"
+            body = freed > 0 ? "Moved \(AppUninstaller.formatSize(freed)) to the Trash." : "Moved to the Trash."
+        }
+
+        let succeeded = error == nil && (failed ?? []).isEmpty
+        if panelIsVisible, page == .uninstall {
+            if succeeded {
+                switchPage(.main)
+            } else {
+                uninstallMessage = "\(title). \(body)"
+                selectedIndex = 0
+                onLayoutChanged?()
+            }
+        }
+        if !succeeded { HapticsService.failure(enabled: config.hapticFeedback) }
+        NotificationService.shared.postInfo(title: title, body: body)
+    }
+
     // MARK: - clipboard capture
 
     func handleClipboardCapture(_ capture: ClipboardService.Capture) {
@@ -1104,6 +1278,8 @@ final class LauncherModel: ObservableObject {
             let screenWidth = NSScreen.main?.visibleFrame.width ?? 1280
             let width = min(1080, max(Self.clipboardWindowWidth, screenWidth * 0.6))
             return NSSize(width: width, height: 500)
+        case .uninstall:
+            return NSSize(width: Self.windowWidth, height: 520)
         }
     }
 
@@ -1129,6 +1305,12 @@ final class LauncherModel: ObservableObject {
         case .clipboard: return "Clipboard history"
         case .emoji: return "Emoji search"
         case .assistant: return "Assistant inbox"
+        case .uninstall:
+            if uninstallLoading || uninstallItems.isEmpty { return "" }
+            let selected = uninstallItems.filter(\.isSelected)
+            let size = selected.compactMap(\.size).reduce(0, +)
+            let sizeText = size > 0 ? " · \(AppUninstaller.formatSize(size))" : ""
+            return "\(selected.count) of \(uninstallItems.count) selected\(sizeText)"
         }
     }
 

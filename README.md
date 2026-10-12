@@ -19,6 +19,13 @@ pure Apple frameworks so every feature leans on the platform directly.
 - Open URLs directly (`github.com`)
 - Inline shell commands: type `> say hi`
 - `quit <app>`, `quit all`, custom shell commands and modes from the config
+- Right-click an app → Open, Show in Finder, Copy Path, (un)favourite, or
+  **Uninstall…**: lists the app plus its leftovers (preferences, caches,
+  containers, launch agents/daemons, receipts…) with sizes, all checked.
+  ↵ toggles a file, ⌘↵ asks to move the checked ones to the Trash (quitting
+  the app first if it's open). Root-owned files go through Finder, which asks
+  for your password; everything stays recoverable with Put Back. Also
+  scriptable: `heycast://uninstall?path=/Applications/Foo.app`
 - Window tiling: 12 positions (halves/quarters/thirds/maximize) for the frontmost window
 - Easter eggs: `randomvar`, `67`, `lemon`, `zombo`, "Ferris Plushies"
 

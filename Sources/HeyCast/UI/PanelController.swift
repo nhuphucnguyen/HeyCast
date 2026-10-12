@@ -293,7 +293,16 @@ final class PanelController: NSObject, NSWindowDelegate {
             if page == .emoji { model.moveSelection(1); return nil }
             return event
         case 36, 76: // return / enter
-            if cmd, page == .main {
+            if page == .uninstall {
+                // ↵ checks/unchecks the highlighted file (or confirms once
+                // the Trash prompt is up); ⌘↵ asks to move the checked
+                // files to the Trash.
+                if cmd && !model.uninstallConfirming {
+                    model.requestUninstall()
+                } else {
+                    model.openFocused()
+                }
+            } else if cmd, page == .main {
                 // ⌘↵ sends the query to the default agent (fire-and-forget).
                 model.sendToDefaultAgent(model.query)
             } else if page == .main {
@@ -375,6 +384,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             guard model.assistantMessages.indices.contains(index) else { return }
             model.selectedIndex = index
             model.openFocused()
+        case .uninstall:
+            guard model.filteredUninstallItems.indices.contains(index) else { return }
+            model.selectedIndex = index
+            model.toggleUninstallItem(at: index)
         }
     }
 
