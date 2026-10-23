@@ -78,8 +78,7 @@ struct LauncherView: View {
 
     private var showFooter: Bool {
         switch model.page {
-        case .main, .files: return true
-        case .extension: return true
+        case .main, .extension: return true
         case .clipboard: return true
         case .assistant: return true
         case .uninstall: return true
@@ -118,7 +117,6 @@ struct LauncherView: View {
     private var pageIcon: String {
         switch model.page {
         case .main: return "magnifyingglass"
-        case .files: return "folder"
         case .clipboard: return "clipboard"
         case .extension: return model.extensionPage?.symbolName ?? "square.grid.3x3"
         case .assistant: return "sparkles"
@@ -141,10 +139,12 @@ struct LauncherView: View {
     private var pageContent: some View {
         switch model.page {
         case .main: resultList
-        case .files: fileList
         case .extension:
-            if let page = model.extensionPage {
-                GridPageView(model: model, content: page.content)
+            if let content = model.extensionPage?.content {
+                switch content.layout {
+                case .list: ListPageView(model: model, content: content)
+                case .grid: GridPageView(model: model, content: content)
+                }
             }
         case .clipboard: ClipboardPageView(model: model)
         case .assistant: AssistantPageView(model: model)
@@ -156,8 +156,8 @@ struct LauncherView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(model.results) { item in
-                        ResultRow(model: model, item: item)
+                    ForEach(Array(model.results.enumerated()), id: \.element.id) { index, item in
+                        ResultRow(model: model, item: item, index: index)
                             .id(item.id)
                     }
                 }
@@ -167,31 +167,6 @@ struct LauncherView: View {
                 guard model.results.indices.contains(model.selectedIndex) else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
                     proxy.scrollTo(model.results[model.selectedIndex].id, anchor: .center)
-                }
-            }
-        }
-        .frame(maxHeight: .infinity)
-    }
-
-    private var fileList: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(Array(model.fileResults.enumerated()), id: \.offset) { index, hit in
-                        FileRow(model: model, hit: hit, isSelected: index == model.selectedIndex)
-                            .id(hit.path)
-                            .onTapGesture {
-                                model.selectedIndex = index
-                                model.openFocused()
-                            }
-                    }
-                }
-                .padding(.horizontal, 10)
-            }
-            .onChange(of: model.selectedIndex) { _ in
-                guard model.fileResults.indices.contains(model.selectedIndex) else { return }
-                withAnimation(.easeOut(duration: 0.12)) {
-                    proxy.scrollTo(model.fileResults[model.selectedIndex].path, anchor: .center)
                 }
             }
         }
@@ -220,7 +195,6 @@ struct LauncherView: View {
     private var pageLabel: String {
         switch model.page {
         case .main: return "HeyCast"
-        case .files: return "File search"
         case .clipboard: return "Clipboard"
         case .extension: return model.extensionPage?.title ?? ""
         case .assistant: return "Assistant"
@@ -234,11 +208,9 @@ struct LauncherView: View {
 struct ResultRow: View {
     @ObservedObject var model: LauncherModel
     let item: ResultItem
+    let index: Int
 
-    private var isSelected: Bool {
-        model.results.indices.contains(model.selectedIndex)
-            && model.results[model.selectedIndex].id == item.id
-    }
+    private var isSelected: Bool { model.selectedIndex == index }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -263,15 +235,11 @@ struct ResultRow: View {
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
         .onTapGesture {
-            if let index = model.results.firstIndex(where: { $0.id == item.id }) {
-                model.selectedIndex = index
-            }
+            model.selectedIndex = index
             model.openResult(item)
         }
         .overlay(RightClickCatcher {
-            if let index = model.results.firstIndex(where: { $0.id == item.id }) {
-                model.selectedIndex = index
-            }
+            model.selectedIndex = index
             model.openActionPanel()
         })
     }
@@ -414,36 +382,6 @@ struct ActionPanelView: View {
         .background(
             RoundedRectangle(cornerRadius: 6)
                 .fill(selected ? model.theme.focusedRow : Color.clear)
-        )
-    }
-}
-
-struct FileRow: View {
-    @ObservedObject var model: LauncherModel
-    let hit: FileSearchService.FileHit
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "doc")
-                .font(.system(size: 15))
-                .foregroundStyle(model.theme.textColor.alpha(0.85))
-                .frame(width: 26, height: 26)
-            Text(hit.name)
-                .font(Font(model.theme.uiFont(size: 15)))
-                .foregroundStyle(model.theme.textColor)
-                .lineLimit(1)
-            Spacer(minLength: 8)
-            Text(FileSearchService.displayPath(hit.path))
-                .font(model.theme.font(.callout))
-                .foregroundStyle(model.theme.textColor.alpha(0.5))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .frame(height: LauncherModel.rowHeight - 2)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? model.theme.focusedRow : model.theme.unfocusedRow.alpha(0.001))
         )
     }
 }

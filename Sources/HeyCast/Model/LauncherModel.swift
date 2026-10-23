@@ -19,7 +19,6 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var assistantMessages: [AssistantMessage] = []
     @Published private(set) var assistantUnread = 0
     @Published var selectedAssistantID: Int64? = nil
-    @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
     @Published private(set) var clipboardPreviewPoppedOut = false
     /// True for the split second while hover moves the clipboard selection —
@@ -62,7 +61,6 @@ final class LauncherModel: ObservableObject {
     let appIndex = AppIndex()
     let clipboardStore = ClipboardStore()
     let assistantService = AssistantService()
-    let fileSearchService = FileSearchService()
     let calendarService = CalendarService()
     let extensions = ExtensionRegistry()
 
@@ -83,7 +81,6 @@ final class LauncherModel: ObservableObject {
     private var lastGoodClipboard: Shortcut?
     private let configWatcher = ConfigWatcher()
     private var rankingSaveTask: Task<Void, Never>?
-    private var fileSearchDebounceTask: Task<Void, Never>?
 
     static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
 
@@ -93,7 +90,6 @@ final class LauncherModel: ObservableObject {
         theme = Theme.resolve(config: config, systemDark: NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
 
         observeSystemAppearance()
-        fileSearchService.onUpdate = { [weak self] in self?.fileSearchUpdated() }
 
         clipboardItems = clipboardStore.load(limit: config.clipboardHistorySize)
         assistantMessages = assistantService.store.load()
@@ -134,8 +130,7 @@ final class LauncherModel: ObservableObject {
         if let source = config.inputSourceOnOpen {
             _ = InputSourceService.select(sourceID: source)
         }
-        page = targetPage
-        extensionPage?.didAppear(ctx: self)
+        setPage(targetPage)
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
@@ -157,6 +152,7 @@ final class LauncherModel: ObservableObject {
     func hide() {
         panelIsVisible = false
         closeActionPanel()
+        extensionPage?.didDisappear()
         cancelClipboardHover()
         clipboardPopOutTask?.cancel()
         setClipboardPopOut(false)
@@ -188,14 +184,19 @@ final class LauncherModel: ObservableObject {
 
     func switchPage(_ target: Page) {
         closeActionPanel()
-        page = target
-        extensionPage?.didAppear(ctx: self)
+        setPage(target)
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
         refreshResults()
         updateClipboardPopOut()
         onLayoutChanged?()
+    }
+
+    private func setPage(_ target: Page) {
+        extensionPage?.didDisappear()
+        page = target
+        extensionPage?.didAppear(ctx: self)
     }
 
     /// Esc dismisses the launcher entirely, from any page and regardless of
@@ -224,7 +225,6 @@ final class LauncherModel: ObservableObject {
         switch page {
         case .extension: return extensionPage?.content.items.count ?? 0
         case .clipboard: return filteredClipboardItems.count
-        case .files: return fileResults.count
         case .assistant: return assistantMessages.count
         case .main: return results.count
         case .uninstall: return filteredUninstallItems.count
@@ -327,11 +327,6 @@ final class LauncherModel: ObservableObject {
         case .main:
             guard results.indices.contains(selectedIndex) else { return }
             openResult(results[selectedIndex])
-        case .files:
-            guard fileSearchService.results.indices.contains(selectedIndex) else { return }
-            let hit = fileSearchService.results[selectedIndex]
-            NSWorkspace.shared.open(URL(fileURLWithPath: hit.path))
-            afterOpen(searchName: nil, hideWindow: true)
         case .clipboard:
             guard filteredClipboardItems.indices.contains(selectedIndex) else { return }
             copyClipboardEntry(filteredClipboardItems[selectedIndex])
@@ -363,20 +358,6 @@ final class LauncherModel: ObservableObject {
         case .main:
             refreshResults()
             HapticsService.tick(enabled: config.hapticFeedback)
-        case .files:
-            fileSearchDebounceTask?.cancel()
-            let text = query
-            if text.count < 2 {
-                fileSearchService.cancel()
-                fileSearchService.results = []
-                onLayoutChanged?()
-                return
-            }
-            fileSearchDebounceTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64((self?.config.debounceDelayMS ?? 300) * 1_000_000))
-                guard !Task.isCancelled else { return }
-                self?.runFileSearch(text)
-            }
         case .extension:
             extensionPage?.queryChanged(query, ctx: self)
             selectedIndex = 0
@@ -388,22 +369,6 @@ final class LauncherModel: ObservableObject {
             updateClipboardPopOut()
         case .assistant, .uninstall:
             selectedIndex = 0
-        }
-        onLayoutChanged?()
-    }
-
-    private func runFileSearch(_ text: String) {
-        fileResults = []
-        fileSearchService.search(text, searchDirs: config.searchDirs)
-        selectedIndex = 0
-        onLayoutChanged?()
-    }
-
-    private func fileSearchUpdated() {
-        fileResults = fileSearchService.results
-        guard page == .files else { return }
-        if !fileResults.indices.contains(selectedIndex) {
-            selectedIndex = max(0, fileResults.count - 1)
         }
         onLayoutChanged?()
     }
@@ -598,8 +563,6 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("clipboard"), searchName: "clipboard", action: .switchPage(.clipboard)),
             ResultItem(id: "builtin-assistant", title: "Assistant", subtitle: "Ask an agent — answers land in your inbox",
                        icon: .symbol("sparkles"), searchName: "assistant", action: .switchPage(.assistant)),
-            ResultItem(id: "builtin-files", title: "Search for a file", subtitle: "File search",
-                       icon: .symbol("folder"), searchName: "file search", action: .switchPage(.files)),
             ResultItem(id: "builtin-reload", title: "Reload HeyCast", subtitle: "Reloads config & apps",
                        icon: .symbol("arrow.clockwise"), searchName: "reload", action: .reload),
             ResultItem(id: "builtin-version", title: "HeyCast v\(Self.appVersion)", subtitle: "Ready when you are.",
@@ -1130,17 +1093,12 @@ final class LauncherModel: ObservableObject {
 
     var desiredWindowSize: NSSize {
         switch page {
-        case .main, .files:
-            let rowCount = min(page == .main ? results.count : fileResults.count, Self.maxVisibleRows)
-            // The ⌘K panel overlays the list.
-            let listHeight = max(CGFloat(rowCount) * Self.rowHeight, actionPanelHeight)
-            let height = Self.chromePadding + Self.searchHeaderHeight
-                + listHeight
-                + (rowCount > 0 ? Self.footerHeight : 0)
-                + Self.chromePadding / 2
-            return NSSize(width: Self.windowWidth, height: max(96, height))
+        case .main:
+            return listWindowSize(rowCount: results.count)
         case .extension:
-            let preferred = extensionPage?.preferredSize ?? NSSize(width: Self.windowWidth, height: 460)
+            guard let preferred = extensionPage?.preferredSize else {
+                return listWindowSize(rowCount: extensionPage?.content.items.count ?? 0)
+            }
             let fitsActionPanel = Self.chromePadding + Self.searchHeaderHeight + actionPanelHeight
                 + Self.footerHeight + Self.chromePadding
             return NSSize(width: preferred.width, height: max(preferred.height, fitsActionPanel))
@@ -1159,6 +1117,17 @@ final class LauncherModel: ObservableObject {
         }
     }
 
+    private func listWindowSize(rowCount: Int) -> NSSize {
+        let rowCount = min(rowCount, Self.maxVisibleRows)
+        // The ⌘K panel overlays the list.
+        let listHeight = max(CGFloat(rowCount) * Self.rowHeight, actionPanelHeight)
+        let height = Self.chromePadding + Self.searchHeaderHeight
+            + listHeight
+            + (rowCount > 0 ? Self.footerHeight : 0)
+            + Self.chromePadding / 2
+        return NSSize(width: Self.windowWidth, height: max(96, height))
+    }
+
     /// Pop-out width clamped so the widened panel still fits the screen with
     /// a margin (the resize logic anchors the panel to one of its edges).
     private var popOutWidthThatFits: CGFloat {
@@ -1175,9 +1144,6 @@ final class LauncherModel: ObservableObject {
             if query.isEmpty { return config.mainPage.displayName }
             let count = results.count
             return count == 1 ? "1 result found" : count == 0 ? "No results found" : "\(count) results found"
-        case .files:
-            let count = fileResults.count
-            return count == 1 ? "1 result found" : "\(count) results found"
         case .clipboard: return "Clipboard history"
         case .extension: return selectedItem?.title ?? ""
         case .assistant: return "Assistant inbox"

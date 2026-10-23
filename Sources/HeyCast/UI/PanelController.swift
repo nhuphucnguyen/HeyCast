@@ -303,10 +303,10 @@ final class PanelController: NSObject, NSWindowDelegate {
             model.moveSelectionVertically(1)
             return nil
         case 123: // left
-            if case .extension = page { model.moveSelection(-1); return nil }
+            if isGridPage { model.moveSelection(-1); return nil }
             return event
         case 124: // right
-            if case .extension = page { model.moveSelection(1); return nil }
+            if isGridPage { model.moveSelection(1); return nil }
             return event
         case 36, 76: // return / enter
             if page == .uninstall {
@@ -392,10 +392,6 @@ final class PanelController: NSObject, NSWindowDelegate {
             guard (model.extensionPage?.content.items.indices ?? 0..<0).contains(index) else { return }
             model.selectedIndex = index
             model.openFocused()
-        case .files:
-            guard model.fileSearchService.results.indices.contains(index) else { return }
-            model.selectedIndex = index
-            model.openFocused()
         case .assistant:
             guard model.assistantMessages.indices.contains(index) else { return }
             model.selectedIndex = index
@@ -460,4 +456,9 @@ final class PanelController: NSObject, NSWindowDelegate {
     }
 
     var page: Page { model.page }
+
+    private var isGridPage: Bool {
+        if case .grid = model.extensionPage?.content.layout { return true }
+        return false
+    }
 }

@@ -2,7 +2,6 @@ import AppKit
 
 enum Page: Equatable {
     case main
-    case files
     case clipboard
     case assistant
     case uninstall
@@ -11,7 +10,6 @@ enum Page: Equatable {
     init(name: String) {
         switch name {
         case "main": self = .main
-        case "files": self = .files
         case "clipboard": self = .clipboard
         case "assistant": self = .assistant
         case "uninstall": self = .uninstall

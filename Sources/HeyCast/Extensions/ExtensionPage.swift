@@ -5,21 +5,40 @@ protocol ExtensionPage: AnyObject {
     var title: String { get }
     var symbolName: String { get }
     var searchPlaceholder: String { get }
-    var preferredSize: NSSize { get }
-    var content: GridContent { get }
+    // nil sizes the window to the rows, like the main page.
+    var preferredSize: NSSize? { get }
+    var content: PageContent { get }
 
     func didAppear(ctx: ExtensionContext)
+    func didDisappear()
     func queryChanged(_ query: String, ctx: ExtensionContext)
 }
 
-struct GridSection {
+extension ExtensionPage {
+    var preferredSize: NSSize? { nil }
+    func didDisappear() {}
+}
+
+struct ItemSection {
     var title: String
     var items: [ResultItem]
 }
 
-struct GridContent {
-    var columns: Int
-    var sections: [GridSection]
+struct PageContent {
+    enum Layout {
+        case list
+        case grid(columns: Int)
+    }
+
+    var layout: Layout
+    var sections: [ItemSection]
+
+    var columns: Int {
+        switch layout {
+        case .list: return 1
+        case .grid(let columns): return columns
+        }
+    }
 
     var items: [ResultItem] { sections.flatMap(\.items) }
 

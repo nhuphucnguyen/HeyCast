@@ -8,6 +8,7 @@ struct ExtensionRegistry {
         WebExtension.Website(),
         CalculatorExtension(),
         WebExtension.Search(),
+        FilesExtension(),
         EmojiExtension(),
     ]
 

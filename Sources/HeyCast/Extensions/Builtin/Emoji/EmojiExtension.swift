@@ -6,8 +6,8 @@ final class EmojiExtension: HeyCastExtension, ExtensionPage {
     let title = "Emoji & Symbols"
     let symbolName = "face.smiling"
     let searchPlaceholder = "Search emoji & symbols…"
-    let preferredSize = NSSize(width: 680, height: 460)
-    private(set) var content = GridContent(columns: 8, sections: [])
+    let preferredSize: NSSize? = NSSize(width: 680, height: 460)
+    private(set) var content = PageContent(layout: .grid(columns: 8), sections: [])
 
     var page: ExtensionPage? { self }
 
@@ -113,7 +113,7 @@ final class EmojiExtension: HeyCastExtension, ExtensionPage {
         content.sections = query.isEmpty ? browseSections() : [searchSection()]
     }
 
-    private func browseSections() -> [GridSection] {
+    private func browseSections() -> [ItemSection] {
         let pinned = (state?.pinned ?? []).compactMap { emojiByCharacter[$0] }
         let frequent = catalog.emoji
             .filter { frecency($0) > 0 && !(state?.pinned.contains($0.character) ?? false) }
@@ -129,12 +129,12 @@ final class EmojiExtension: HeyCastExtension, ExtensionPage {
         return sections.filter { !$0.items.isEmpty }
     }
 
-    private func searchSection() -> GridSection {
+    private func searchSection() -> ItemSection {
         let results = catalog.search(query) { Int(min(9, frecency($0))) }
         return section("Results", results)
     }
 
-    private func section(_ title: String, _ emoji: [Emoji], isPinned: Bool = false) -> GridSection {
+    private func section(_ title: String, _ emoji: [Emoji], isPinned: Bool = false) -> ItemSection {
         let sectionText = emoji.map { $0.withSkinTone(state?.skinTone) }.joined()
         let items = emoji.map { entry in
             ResultItem(id: "\(title)-\(entry.character)",
@@ -142,7 +142,7 @@ final class EmojiExtension: HeyCastExtension, ExtensionPage {
                        icon: .emoji(entry.withSkinTone(state?.skinTone)),
                        actions: actions(for: entry, isPinned: isPinned, sectionText: sectionText))
         }
-        return GridSection(title: title, items: items)
+        return ItemSection(title: title, items: items)
     }
 
     private func actions(for emoji: Emoji, isPinned: Bool, sectionText: String) -> [ItemAction] {

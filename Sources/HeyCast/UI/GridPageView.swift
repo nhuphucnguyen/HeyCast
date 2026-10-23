@@ -2,7 +2,7 @@ import SwiftUI
 
 struct GridPageView: View {
     @ObservedObject var model: LauncherModel
-    let content: GridContent
+    let content: PageContent
 
     private let spacing: CGFloat = 8
 

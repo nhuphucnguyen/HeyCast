@@ -202,6 +202,7 @@ extension LauncherModel: ExtensionContext {
     }
 
     func reloadPage() {
+        guard extensionPage != nil else { return }
         let selectedID = selectedItem?.id
         objectWillChange.send()
         let items = extensionPage?.content.items ?? []
