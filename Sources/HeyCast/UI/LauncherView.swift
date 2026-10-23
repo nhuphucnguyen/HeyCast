@@ -150,6 +150,13 @@ struct LauncherView: View {
                 }
                 .padding(.horizontal, 10)
             }
+            .overlay(alignment: .bottomTrailing) {
+                if model.actionPanelOpen, let item = model.selectedResult {
+                    ActionPanelView(model: model, item: item)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 4)
+                }
+            }
             .onChange(of: model.selectedIndex) { _ in
                 guard model.results.indices.contains(model.selectedIndex) else { return }
                 withAnimation(.easeOut(duration: 0.12)) {
@@ -191,6 +198,12 @@ struct LauncherView: View {
                 .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
             Spacer()
+            if model.selectedResult?.hasActions == true {
+                Text("Actions ⌘K")
+                    .font(model.theme.font(.callout))
+                    .foregroundStyle(model.theme.textColor.alpha(0.45))
+                    .padding(.trailing, 8)
+            }
             Text(pageLabel)
                 .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
@@ -249,31 +262,12 @@ struct ResultRow: View {
             }
             model.openResult(item)
         }
-        .contextMenu { contextMenuItems }
-    }
-
-    /// Right-click actions. Apps get Raycast's set, ending in Uninstall.
-    @ViewBuilder
-    private var contextMenuItems: some View {
-        if case let .launchApp(url, _) = item.action {
-            Button("Open") { model.openResult(item) }
-            Button("Show in Finder") {
-                NSWorkspace.shared.activateFileViewerSelecting([url])
-                model.hide()
+        .overlay(RightClickCatcher {
+            if let index = model.results.firstIndex(where: { $0.id == item.id }) {
+                model.selectedIndex = index
             }
-            Button("Copy Path") { model.copyText(url.path) }
-            if item.searchName != nil {
-                Button(item.favorite ? "Remove from Favourites" : "Add to Favourites") {
-                    model.toggleFavorite(item)
-                }
-            }
-            Divider()
-            Button("Uninstall…", role: .destructive) {
-                model.beginUninstall(appPath: url.path)
-            }
-        } else {
-            Button("Open") { model.openResult(item) }
-        }
+            model.openActionPanel()
+        })
     }
 
     @ViewBuilder
@@ -315,6 +309,93 @@ struct ResultRow: View {
             }
         }
         .frame(width: 18)
+    }
+}
+
+// Claims only right/⌃-clicks so left clicks and hover still reach the row.
+struct RightClickCatcher: NSViewRepresentable {
+    let onRightClick: () -> Void
+
+    func makeNSView(context: Context) -> CatcherView {
+        let view = CatcherView()
+        view.onRightClick = onRightClick
+        return view
+    }
+
+    func updateNSView(_ view: CatcherView, context: Context) {
+        view.onRightClick = onRightClick
+    }
+
+    final class CatcherView: NSView {
+        var onRightClick: (() -> Void)?
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            let isRight = event.type == .rightMouseDown
+                || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+            return isRight ? super.hitTest(point) : nil
+        }
+
+        override func rightMouseDown(with event: NSEvent) { onRightClick?() }
+
+        override func mouseDown(with event: NSEvent) { onRightClick?() }
+    }
+}
+
+struct ActionPanelView: View {
+    @ObservedObject var model: LauncherModel
+    let item: ResultItem
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(item.actions.enumerated()), id: \.offset) { index, action in
+                row(action, selected: index == model.actionPanelIndex)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.perform(action, on: item) }
+                    .onHover { if $0 { model.actionPanelIndex = index } }
+            }
+        }
+        .padding(8)
+        .frame(width: 280)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.25), radius: 12, y: 4)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(model.theme.textColor.alpha(0.12))
+        )
+    }
+
+    private func row(_ action: ItemAction, selected: Bool) -> some View {
+        let tint = action.style == .destructive ? Color.red : model.theme.textColor
+        return HStack(spacing: 8) {
+            Image(systemName: action.symbolName ?? "circle")
+                .font(.system(size: 12))
+                .frame(width: 18)
+                .foregroundStyle(tint.alpha(0.85))
+            Text(action.title)
+                .font(model.theme.font(.body))
+                .foregroundStyle(tint)
+                .lineLimit(1)
+            Spacer(minLength: 8)
+            if let shortcut = action.shortcut {
+                Text(shortcut.displayString)
+                    .font(model.theme.font(.subheadline))
+                    .foregroundStyle(model.theme.textColor.alpha(0.45))
+            } else if action == item.actions.first {
+                Text("↵")
+                    .font(model.theme.font(.subheadline))
+                    .foregroundStyle(model.theme.textColor.alpha(0.45))
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: LauncherModel.actionPanelRowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selected ? model.theme.focusedRow : Color.clear)
+        )
     }
 }
 

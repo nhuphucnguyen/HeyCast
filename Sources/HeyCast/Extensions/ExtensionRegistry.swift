@@ -1,10 +1,8 @@
 import Foundation
 
-/// The set of extensions compiled into HeyCast. Adding a feature means adding
-/// a type under Extensions/ and listing it here.
 @MainActor
 struct ExtensionRegistry {
-    /// Order matters: within a phase, rows appear in this order.
+    // Order matters: within a phase, rows appear in this order.
     let extensions: [HeyCastExtension] = [
         WindowTilingExtension(),
         WebExtension.Website(),
@@ -14,6 +12,10 @@ struct ExtensionRegistry {
 
     func commands(_ ctx: ExtensionContext) -> [ResultItem] {
         extensions.flatMap { $0.commands(ctx) }
+    }
+
+    func perform(extensionID: String, key: String, payload: String, ctx: ExtensionContext) {
+        extensions.first { $0.id == extensionID }?.perform(key, payload: payload, ctx: ctx)
     }
 
     func results(for query: String, phase: ResultPhase, ctx: ExtensionContext) -> [ResultItem] {

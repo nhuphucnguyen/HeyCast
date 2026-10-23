@@ -1,6 +1,5 @@
 import Foundation
 
-/// Unit conversions and arithmetic as instant answers.
 struct CalculatorExtension: HeyCastExtension {
     let id = "calculator"
     let title = "Calculator"

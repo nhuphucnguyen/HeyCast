@@ -279,6 +279,22 @@ final class PanelController: NSObject, NSWindowDelegate {
         let cmd = flags.contains(.command)
         let ctrl = flags.contains(.control)
 
+        if page == .main, cmd, event.charactersIgnoringModifiers?.lowercased() == "k" {
+            model.toggleActionPanel()
+            return nil
+        }
+        if model.actionPanelOpen {
+            switch event.keyCode {
+            case 126: model.moveActionPanelSelection(-1); return nil
+            case 125: model.moveActionPanelSelection(1); return nil
+            case 36, 76: model.performActionPanelSelection(); return nil
+            default: break
+            }
+        }
+        if page == .main, cmd || ctrl, model.performShortcut(event) {
+            return nil
+        }
+
         switch event.keyCode {
         case 126: // up
             model.moveSelection(page == .emoji ? -6 : -1)

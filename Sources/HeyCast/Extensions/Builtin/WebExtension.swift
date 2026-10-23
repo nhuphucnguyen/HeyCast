@@ -1,7 +1,6 @@
 import Foundation
 
-/// Opening URL-like queries and searching the web. Two extensions so the
-/// registry can rank web search after every other instant answer.
+// Two extensions so web search ranks after every other instant answer.
 enum WebExtension {
     struct Website: HeyCastExtension, ResultProvider {
         let id = "website"
@@ -38,7 +37,6 @@ enum WebExtension {
         let phase = ResultPhase.fallback
         var providers: [ResultProvider] { [self] }
 
-        /// Questions ("…?") and multi-word queries.
         func results(for query: String, ctx: ExtensionContext) -> [ResultItem] {
             let wordCount = query.split(separator: " ").count
             guard query.hasSuffix("?") || wordCount >= 3 else { return [] }

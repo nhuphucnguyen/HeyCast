@@ -37,6 +37,8 @@ final class LauncherModel: ObservableObject {
     /// Human-readable problem with the configured hotkeys (invalid syntax or
     /// a registration conflict); nil when everything registered fine.
     @Published private(set) var hotkeyIssue: String? = nil
+    @Published var actionPanelOpen = false
+    @Published var actionPanelIndex = 0
 
     // MARK: config & stores
     var config: Config {
@@ -160,6 +162,7 @@ final class LauncherModel: ObservableObject {
 
     func hide() {
         panelIsVisible = false
+        closeActionPanel()
         cancelClipboardHover()
         clipboardPopOutTask?.cancel()
         setClipboardPopOut(false)
@@ -177,6 +180,7 @@ final class LauncherModel: ObservableObject {
     // MARK: - pages
 
     func switchPage(_ target: Page) {
+        closeActionPanel()
         page = target
         query = ""
         selectedIndex = 0
@@ -191,6 +195,10 @@ final class LauncherModel: ObservableObject {
     /// levels of a hierarchy — there is no "back" to go to; their hotkeys or
     /// the next toggle bring the launcher back (on the main page).
     func escPressed() {
+        if actionPanelOpen {
+            closeActionPanel()
+            return
+        }
         if page == .uninstall, uninstallConfirming {
             uninstallConfirming = false
             return
@@ -331,6 +339,7 @@ final class LauncherModel: ObservableObject {
     // MARK: - query pipeline
 
     private func queryChanged() {
+        closeActionPanel()
         switch page {
         case .main:
             refreshResults()
@@ -462,7 +471,9 @@ final class LauncherModel: ObservableObject {
                    icon: .app(entry.icon),
                    favorite: ranking.isFavorite(entry.searchName),
                    searchName: entry.searchName,
-                   action: .launchApp(URL(fileURLWithPath: entry.path), searchName: entry.searchName))
+                   actions: Self.appActions(url: URL(fileURLWithPath: entry.path),
+                                            searchName: entry.searchName,
+                                            favorite: ranking.isFavorite(entry.searchName)))
     }
 
     private func searchResults(for rawQuery: String) -> [ResultItem] {
@@ -544,7 +555,6 @@ final class LauncherModel: ObservableObject {
             }
         }
 
-        // Instant answers and fallbacks are shown when nothing else matched.
         if out.isEmpty {
             out = extensions.results(for: query, phase: .instantAnswer, ctx: self)
                 + extensions.results(for: query, phase: .fallback, ctx: self)
@@ -599,70 +609,11 @@ final class LauncherModel: ObservableObject {
     // MARK: - actions
 
     func openResult(_ item: ResultItem) {
-        switch item.action {
-        case let .launchApp(url, searchName):
-            NSWorkspace.shared.open(url)
-            ranking.bump(searchName)
-            afterOpen(searchName: searchName, hideWindow: true)
-
-        case let .askAgent(alias, text):
-            sendToAgent(alias: alias, text: text)
-            afterOpen(searchName: nil, hideWindow: true)
-
-        case .openURL(let url):
-            NSWorkspace.shared.open(url)
-            afterOpen(searchName: item.searchName, hideWindow: true)
-
-        case .runShell(let command):
-            ShellRunner.run(command)
-            afterOpen(searchName: item.searchName, hideWindow: true)
-
-        case .copyText(let text):
-            copyText(text)
-
-        case .copyEmoji(let text):
-            copyText(text)
-
-        case .quitApp(let name):
-            AppIndex.terminateApp(named: name)
-            afterOpen(searchName: nil, hideWindow: true)
-
-        case .quitAll:
-            AppIndex.terminateAllApps()
-            afterOpen(searchName: nil, hideWindow: true)
-
-        case .quitSelf:
-            saveRankingNow()
-            exit(0)
-
-        case .tile(let position):
-            let target = frontmostApp ?? NSWorkspace.shared.frontmostApplication
-            let ok = target.flatMap { TilingService.tile(application: $0, position: position) } ?? false
-            if !ok {
-                HapticsService.failure(enabled: true)
-            }
-            hide()
-
-        case .switchPage(let target):
-            switchPage(target)
-
-        case .openSettings:
-            onOpenSettings?()
-            hide()
-
-        case .reload:
-            reloadConfig(force: true)
-
-        case .openEvent:
-            CalendarService.openInCalendar()
-            hide()
-
-        case .display:
-            break
-        }
+        guard let primary = item.actions.first else { return }
+        perform(primary, on: item)
     }
 
-    private func afterOpen(searchName: String?, hideWindow: Bool) {
+    func afterOpen(searchName: String?, hideWindow: Bool) {
         if hideWindow {
             hide()
             if config.clearOnEnter { query = "" }
@@ -1175,8 +1126,10 @@ final class LauncherModel: ObservableObject {
         switch page {
         case .main, .files:
             let rowCount = min(page == .main ? results.count : fileResults.count, Self.maxVisibleRows)
+            // The ⌘K panel overlays the list.
+            let listHeight = max(CGFloat(rowCount) * Self.rowHeight, actionPanelHeight)
             let height = Self.chromePadding + Self.searchHeaderHeight
-                + CGFloat(rowCount) * Self.rowHeight
+                + listHeight
                 + (rowCount > 0 ? Self.footerHeight : 0)
                 + Self.chromePadding / 2
             return NSSize(width: Self.windowWidth, height: max(96, height))
@@ -1297,5 +1250,3 @@ enum ShellRunner {
         try? process.run()
     }
 }
-
-extension LauncherModel: ExtensionContext {}
