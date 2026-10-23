@@ -8,7 +8,12 @@ struct ExtensionRegistry {
         WebExtension.Website(),
         CalculatorExtension(),
         WebExtension.Search(),
+        EmojiExtension(),
     ]
+
+    func page(_ extensionID: String) -> ExtensionPage? {
+        extensions.first { $0.id == extensionID }?.page
+    }
 
     func commands(_ ctx: ExtensionContext) -> [ResultItem] {
         extensions.flatMap { $0.commands(ctx) }

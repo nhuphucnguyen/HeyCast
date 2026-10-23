@@ -3,7 +3,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode-beta.app/Contents/Developer}"
+# Command Line Tools lack the SwiftUI macro plugins, so a full Xcode is required.
+if [[ -z "${DEVELOPER_DIR:-}" ]]; then
+    selected="$(xcode-select -p 2>/dev/null || true)"
+    if [[ "$selected" == *.app/Contents/Developer ]]; then
+        DEVELOPER_DIR="$selected"
+    else
+        xcode=(/Applications/Xcode*.app(N[1]))
+        [[ -n "${xcode:-}" ]] || { echo "error: Xcode not found in /Applications" >&2; exit 1; }
+        DEVELOPER_DIR="$xcode/Contents/Developer"
+    fi
+fi
+echo "==> using $DEVELOPER_DIR"
 APP_NAME="HeyCast"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"

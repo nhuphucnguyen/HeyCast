@@ -279,7 +279,7 @@ final class PanelController: NSObject, NSWindowDelegate {
         let cmd = flags.contains(.command)
         let ctrl = flags.contains(.control)
 
-        if page == .main, cmd, event.charactersIgnoringModifiers?.lowercased() == "k" {
+        if model.supportsItemActions, cmd, event.charactersIgnoringModifiers?.lowercased() == "k" {
             model.toggleActionPanel()
             return nil
         }
@@ -291,22 +291,22 @@ final class PanelController: NSObject, NSWindowDelegate {
             default: break
             }
         }
-        if page == .main, cmd || ctrl, model.performShortcut(event) {
+        if model.supportsItemActions, cmd || ctrl || flags.contains(.option), model.performShortcut(event) {
             return nil
         }
 
         switch event.keyCode {
         case 126: // up
-            model.moveSelection(page == .emoji ? -6 : -1)
+            model.moveSelectionVertically(-1)
             return nil
         case 125: // down
-            model.moveSelection(page == .emoji ? 6 : 1)
+            model.moveSelectionVertically(1)
             return nil
         case 123: // left
-            if page == .emoji { model.moveSelection(-1); return nil }
+            if case .extension = page { model.moveSelection(-1); return nil }
             return event
         case 124: // right
-            if page == .emoji { model.moveSelection(1); return nil }
+            if case .extension = page { model.moveSelection(1); return nil }
             return event
         case 36, 76: // return / enter
             if page == .uninstall {
@@ -388,8 +388,8 @@ final class PanelController: NSObject, NSWindowDelegate {
             guard model.filteredClipboardItems.indices.contains(index) else { return }
             model.selectedIndex = index
             model.openFocused()
-        case .emoji:
-            guard model.emojiResults.indices.contains(index) else { return }
+        case .extension:
+            guard (model.extensionPage?.content.items.indices ?? 0..<0).contains(index) else { return }
             model.selectedIndex = index
             model.openFocused()
         case .files:

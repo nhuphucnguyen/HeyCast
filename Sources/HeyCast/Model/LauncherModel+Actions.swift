@@ -2,6 +2,13 @@ import AppKit
 
 extension LauncherModel {
     func perform(_ action: ItemAction, on item: ResultItem) {
+        if !action.children.isEmpty {
+            actionPanelSubmenu = action
+            actionPanelIndex = 0
+            if !actionPanelOpen { actionPanelOpen = true }
+            onLayoutChanged?()
+            return
+        }
         closeActionPanel()
         switch action.kind {
         case let .launchApp(url, searchName):
@@ -85,9 +92,25 @@ extension LauncherModel {
 
     // MARK: - action panel
 
-    var selectedResult: ResultItem? {
-        guard page == .main, results.indices.contains(selectedIndex) else { return nil }
-        return results[selectedIndex]
+    var supportsItemActions: Bool {
+        switch page {
+        case .main, .extension: return true
+        default: return false
+        }
+    }
+
+    var selectedItem: ResultItem? {
+        let items: [ResultItem]
+        switch page {
+        case .main: items = results
+        case .extension: items = extensionPage?.content.items ?? []
+        default: return nil
+        }
+        return items.indices.contains(selectedIndex) ? items[selectedIndex] : nil
+    }
+
+    var actionPanelActions: [ItemAction] {
+        actionPanelSubmenu?.children ?? selectedItem?.actions ?? []
     }
 
     func toggleActionPanel() {
@@ -99,8 +122,9 @@ extension LauncherModel {
     }
 
     func openActionPanel() {
-        guard let item = selectedResult, item.hasActions else { return }
+        guard let item = selectedItem, item.hasActions else { return }
         actionPanelIndex = 0
+        actionPanelSubmenu = nil
         if !actionPanelOpen {
             actionPanelOpen = true
             onLayoutChanged?()
@@ -110,21 +134,30 @@ extension LauncherModel {
     func closeActionPanel() {
         guard actionPanelOpen else { return }
         actionPanelOpen = false
+        actionPanelSubmenu = nil
+        onLayoutChanged?()
+    }
+
+    func closeActionPanelSubmenu() {
+        actionPanelSubmenu = nil
+        actionPanelIndex = 0
         onLayoutChanged?()
     }
 
     func moveActionPanelSelection(_ delta: Int) {
-        guard let count = selectedResult?.actions.count, count > 0 else { return }
+        let count = actionPanelActions.count
+        guard count > 0 else { return }
         actionPanelIndex = max(0, min(count - 1, actionPanelIndex + delta))
     }
 
     func performActionPanelSelection() {
-        guard let item = selectedResult, item.actions.indices.contains(actionPanelIndex) else { return }
-        perform(item.actions[actionPanelIndex], on: item)
+        let actions = actionPanelActions
+        guard let item = selectedItem, actions.indices.contains(actionPanelIndex) else { return }
+        perform(actions[actionPanelIndex], on: item)
     }
 
     func performShortcut(_ event: NSEvent) -> Bool {
-        guard let item = selectedResult,
+        guard let item = selectedItem,
               let action = item.actions.first(where: { $0.shortcut?.matches(event) == true })
         else { return false }
         perform(action, on: item)
@@ -132,8 +165,8 @@ extension LauncherModel {
     }
 
     var actionPanelHeight: CGFloat {
-        guard actionPanelOpen, let count = selectedResult?.actions.count else { return 0 }
-        return CGFloat(count) * Self.actionPanelRowHeight + 16
+        guard actionPanelOpen else { return 0 }
+        return CGFloat(actionPanelActions.count) * Self.actionPanelRowHeight + 16
     }
 
     static let actionPanelRowHeight: CGFloat = 30
@@ -148,7 +181,31 @@ extension LauncherModel: ExtensionContext {
         NSWorkspace.shared.open(url)
     }
 
+    func copy(_ text: String, keepOpen: Bool) {
+        ClipboardService.copy(text: text)
+        if !keepOpen { afterOpen(searchName: nil, hideWindow: true) }
+    }
+
+    func paste(_ text: String, keepOpen: Bool) {
+        ClipboardService.copy(text: text)
+        guard let pid = targetApplication?.processIdentifier else { return }
+        if !keepOpen { hide() }
+        ClipboardService.simulatePaste(toPid: pid)
+    }
+
     func signalFailure() {
         HapticsService.failure(enabled: true)
+    }
+
+    func store(for extensionID: String) -> ExtensionStore {
+        ExtensionStore(extensionID: extensionID)
+    }
+
+    func reloadPage() {
+        let selectedID = selectedItem?.id
+        objectWillChange.send()
+        let items = extensionPage?.content.items ?? []
+        selectedIndex = items.firstIndex { $0.id == selectedID } ?? min(selectedIndex, max(0, items.count - 1))
+        onLayoutChanged?()
     }
 }

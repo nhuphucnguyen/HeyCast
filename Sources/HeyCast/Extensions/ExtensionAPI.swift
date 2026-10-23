@@ -9,12 +9,15 @@ protocol HeyCastExtension {
 
     var providers: [ResultProvider] { get }
 
+    var page: ExtensionPage? { get }
+
     func perform(_ key: String, payload: String, ctx: ExtensionContext)
 }
 
 extension HeyCastExtension {
     func commands(_ ctx: ExtensionContext) -> [ResultItem] { [] }
     var providers: [ResultProvider] { [] }
+    var page: ExtensionPage? { nil }
     func perform(_ key: String, payload: String, ctx: ExtensionContext) {}
 }
 
@@ -39,6 +42,9 @@ protocol ExtensionContext: AnyObject {
     var targetApplication: NSRunningApplication? { get }
     func hide()
     func open(_ url: URL)
-    func copyText(_ text: String)
+    func copy(_ text: String, keepOpen: Bool)
+    func paste(_ text: String, keepOpen: Bool)
     func signalFailure()
+    func store(for extensionID: String) -> ExtensionStore
+    func reloadPage()
 }

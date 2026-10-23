@@ -146,9 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.escPressed()
         case "page":
             let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            if let name = params.first(where: { $0.name == "name" })?.value,
-               let page = Page(rawValue: name) {
-                model.show(to: page)
+            if let name = params.first(where: { $0.name == "name" })?.value {
+                model.show(to: Page(name: name))
             }
         case "settings":
             let params = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []

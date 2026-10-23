@@ -1,12 +1,23 @@
 import AppKit
 
-enum Page: String, CaseIterable {
+enum Page: Equatable {
     case main
     case files
     case clipboard
-    case emoji
     case assistant
     case uninstall
+    case `extension`(String)
+
+    init(name: String) {
+        switch name {
+        case "main": self = .main
+        case "files": self = .files
+        case "clipboard": self = .clipboard
+        case "assistant": self = .assistant
+        case "uninstall": self = .uninstall
+        default: self = .extension(name)
+        }
+    }
 }
 
 enum ResultIcon {
@@ -55,8 +66,14 @@ struct ActionShortcut: Equatable {
         if modifiers.contains(.option) { out += "⌥" }
         if modifiers.contains(.shift) { out += "⇧" }
         if modifiers.contains(.command) { out += "⌘" }
-        return out + key.uppercased()
+        return out + (Self.keySymbols[key] ?? key.uppercased())
     }
+
+    static let returnKey = "\r"
+    static let upArrow = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+    static let downArrow = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+
+    private static let keySymbols = [returnKey: "↵", upArrow: "↑", downArrow: "↓"]
 }
 
 // Plain data so rows can later come from out-of-process extensions.
@@ -68,6 +85,8 @@ struct ItemAction: Equatable {
     var shortcut: ActionShortcut?
     var style: Style = .regular
     var kind: ResultAction
+    // Non-empty makes this a submenu; kind is then ignored.
+    var children: [ItemAction] = []
 
     init(_ title: String? = nil, symbolName: String? = nil, shortcut: ActionShortcut? = nil,
          style: Style = .regular, kind: ResultAction) {
@@ -76,6 +95,13 @@ struct ItemAction: Equatable {
         self.shortcut = shortcut
         self.style = style
         self.kind = kind
+    }
+
+    static func submenu(_ title: String, symbolName: String? = nil, shortcut: ActionShortcut? = nil,
+                        _ children: [ItemAction]) -> ItemAction {
+        var action = ItemAction(title, symbolName: symbolName, shortcut: shortcut, kind: .display)
+        action.children = children
+        return action
     }
 
     private static func defaultTitle(for kind: ResultAction) -> String {

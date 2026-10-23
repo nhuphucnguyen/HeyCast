@@ -19,7 +19,6 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var assistantMessages: [AssistantMessage] = []
     @Published private(set) var assistantUnread = 0
     @Published var selectedAssistantID: Int64? = nil
-    @Published private(set) var emojiResults: [EmojiEntry] = []
     @Published private(set) var fileResults: [FileSearchService.FileHit] = []
     @Published var clipboardPreviewIndex: Int? = nil
     @Published private(set) var clipboardPreviewPoppedOut = false
@@ -39,6 +38,7 @@ final class LauncherModel: ObservableObject {
     @Published private(set) var hotkeyIssue: String? = nil
     @Published var actionPanelOpen = false
     @Published var actionPanelIndex = 0
+    @Published var actionPanelSubmenu: ItemAction?
 
     // MARK: config & stores
     var config: Config {
@@ -60,7 +60,6 @@ final class LauncherModel: ObservableObject {
 
     // MARK: services
     let appIndex = AppIndex()
-    let emojiIndex = EmojiIndex()
     let clipboardStore = ClipboardStore()
     let assistantService = AssistantService()
     let fileSearchService = FileSearchService()
@@ -85,7 +84,6 @@ final class LauncherModel: ObservableObject {
     private let configWatcher = ConfigWatcher()
     private var rankingSaveTask: Task<Void, Never>?
     private var fileSearchDebounceTask: Task<Void, Never>?
-    private var emojiDebounceTask: Task<Void, Never>?
 
     static let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
 
@@ -102,11 +100,6 @@ final class LauncherModel: ObservableObject {
         assistantUnread = assistantService.store.unreadCount()
         assistantService.onUpdated = { [weak self] in self?.assistantUpdated() }
 
-        emojiIndex.load { [weak self] in
-            guard let self, self.page == .emoji else { return }
-            self.emojiResults = Array(self.emojiIndex.entries.prefix(120))
-            self.onLayoutChanged?()
-        }
         appIndex.load(blacklist: config.blacklist) { [weak self] in
             guard let self, self.page == .main else { return }
             self.refreshResults()
@@ -142,6 +135,7 @@ final class LauncherModel: ObservableObject {
             _ = InputSourceService.select(sourceID: source)
         }
         page = targetPage
+        extensionPage?.didAppear(ctx: self)
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
@@ -179,9 +173,23 @@ final class LauncherModel: ObservableObject {
 
     // MARK: - pages
 
+    var extensionPage: ExtensionPage? {
+        guard case let .extension(id) = page else { return nil }
+        return extensions.page(id)
+    }
+
+    var searchPlaceholder: String {
+        switch page {
+        case .uninstall: return "Filter files and folders…"
+        case .extension: return extensionPage?.searchPlaceholder ?? config.placeholder
+        default: return config.placeholder
+        }
+    }
+
     func switchPage(_ target: Page) {
         closeActionPanel()
         page = target
+        extensionPage?.didAppear(ctx: self)
         query = ""
         selectedIndex = 0
         clipboardPreviewIndex = nil
@@ -195,6 +203,10 @@ final class LauncherModel: ObservableObject {
     /// levels of a hierarchy — there is no "back" to go to; their hotkeys or
     /// the next toggle bring the launcher back (on the main page).
     func escPressed() {
+        if actionPanelSubmenu != nil {
+            closeActionPanelSubmenu()
+            return
+        }
         if actionPanelOpen {
             closeActionPanel()
             return
@@ -210,13 +222,21 @@ final class LauncherModel: ObservableObject {
 
     var maxSelection: Int {
         switch page {
-        case .emoji: return emojiResults.count
+        case .extension: return extensionPage?.content.items.count ?? 0
         case .clipboard: return filteredClipboardItems.count
         case .files: return fileResults.count
         case .assistant: return assistantMessages.count
         case .main: return results.count
         case .uninstall: return filteredUninstallItems.count
         }
+    }
+
+    func moveSelectionVertically(_ delta: Int) {
+        guard let content = extensionPage?.content, !content.items.isEmpty else {
+            moveSelection(delta)
+            return
+        }
+        selectedIndex = content.index(movingVerticallyFrom: selectedIndex, by: delta)
     }
 
     func moveSelection(_ delta: Int) {
@@ -315,9 +335,8 @@ final class LauncherModel: ObservableObject {
         case .clipboard:
             guard filteredClipboardItems.indices.contains(selectedIndex) else { return }
             copyClipboardEntry(filteredClipboardItems[selectedIndex])
-        case .emoji:
-            guard emojiResults.indices.contains(selectedIndex) else { return }
-            copyText(emojiResults[selectedIndex].character)
+        case .extension:
+            if let item = selectedItem { openResult(item) }
         case .assistant:
             // With a query: ask the default agent. Without: read the
             // highlighted inbox entry (marks it viewed).
@@ -358,14 +377,9 @@ final class LauncherModel: ObservableObject {
                 guard !Task.isCancelled else { return }
                 self?.runFileSearch(text)
             }
-        case .emoji:
-            emojiDebounceTask?.cancel()
-            let text = query
-            emojiDebounceTask = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64((self?.config.debounceDelayMS ?? 300) * 1_000_000))
-                guard !Task.isCancelled else { return }
-                self?.runEmojiSearch(text)
-            }
+        case .extension:
+            extensionPage?.queryChanged(query, ctx: self)
+            selectedIndex = 0
         case .clipboard:
             selectedIndex = 0
             clipboardPreviewIndex = nil
@@ -381,12 +395,6 @@ final class LauncherModel: ObservableObject {
     private func runFileSearch(_ text: String) {
         fileResults = []
         fileSearchService.search(text, searchDirs: config.searchDirs)
-        selectedIndex = 0
-        onLayoutChanged?()
-    }
-
-    private func runEmojiSearch(_ text: String) {
-        emojiResults = emojiIndex.search(text)
         selectedIndex = 0
         onLayoutChanged?()
     }
@@ -586,8 +594,6 @@ final class LauncherModel: ObservableObject {
         var out = [
             ResultItem(id: "builtin-settings", title: "Open HeyCast Preferences", subtitle: "Settings",
                        icon: .symbol("gearshape"), searchName: "settings", action: .openSettings),
-            ResultItem(id: "builtin-emoji", title: "Search for an Emoji", subtitle: "Emoji search",
-                       icon: .symbol("face.smiling"), searchName: "emoji", action: .switchPage(.emoji)),
             ResultItem(id: "builtin-clipboard", title: "Clipboard History", subtitle: "Clipboard",
                        icon: .symbol("clipboard"), searchName: "clipboard", action: .switchPage(.clipboard)),
             ResultItem(id: "builtin-assistant", title: "Assistant", subtitle: "Ask an agent — answers land in your inbox",
@@ -1133,11 +1139,11 @@ final class LauncherModel: ObservableObject {
                 + (rowCount > 0 ? Self.footerHeight : 0)
                 + Self.chromePadding / 2
             return NSSize(width: Self.windowWidth, height: max(96, height))
-        case .emoji:
-            let rows = CGFloat(max(1, (emojiResults.count + 5) / 6))
-            let gridHeight = min(rows * 64 + 10, 320)
-            let height = Self.chromePadding + Self.searchHeaderHeight + gridHeight + Self.footerHeight + Self.chromePadding / 2
-            return NSSize(width: Self.windowWidth, height: height)
+        case .extension:
+            let preferred = extensionPage?.preferredSize ?? NSSize(width: Self.windowWidth, height: 460)
+            let fitsActionPanel = Self.chromePadding + Self.searchHeaderHeight + actionPanelHeight
+                + Self.footerHeight + Self.chromePadding
+            return NSSize(width: preferred.width, height: max(preferred.height, fitsActionPanel))
         case .clipboard:
             let width = Self.clipboardWindowWidth
                 + (clipboardPreviewPoppedOut ? popOutWidthThatFits : 0)
@@ -1173,7 +1179,7 @@ final class LauncherModel: ObservableObject {
             let count = fileResults.count
             return count == 1 ? "1 result found" : "\(count) results found"
         case .clipboard: return "Clipboard history"
-        case .emoji: return "Emoji search"
+        case .extension: return selectedItem?.title ?? ""
         case .assistant: return "Assistant inbox"
         case .uninstall:
             if uninstallLoading || uninstallItems.isEmpty { return "" }

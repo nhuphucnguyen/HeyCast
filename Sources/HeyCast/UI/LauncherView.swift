@@ -79,7 +79,7 @@ struct LauncherView: View {
     private var showFooter: Bool {
         switch model.page {
         case .main, .files: return true
-        case .emoji: return true
+        case .extension: return true
         case .clipboard: return true
         case .assistant: return true
         case .uninstall: return true
@@ -91,8 +91,7 @@ struct LauncherView: View {
             Image(systemName: pageIcon)
                 .foregroundStyle(model.theme.textColor.alpha(0.5))
                 .font(.system(size: 15))
-            TextField(model.page == .uninstall ? "Filter files and folders…" : model.config.placeholder,
-                      text: $model.query)
+            TextField(model.searchPlaceholder, text: $model.query)
                 .focused($searchFocused)
                 .textFieldStyle(.plain)
                 .font(Font(model.theme.uiFont(size: 19)))
@@ -121,18 +120,32 @@ struct LauncherView: View {
         case .main: return "magnifyingglass"
         case .files: return "folder"
         case .clipboard: return "clipboard"
-        case .emoji: return "face.smiling"
+        case .extension: return model.extensionPage?.symbolName ?? "square.grid.3x3"
         case .assistant: return "sparkles"
         case .uninstall: return "trash"
         }
     }
 
-    @ViewBuilder
     private var content: some View {
+        pageContent
+            .overlay(alignment: .bottomTrailing) {
+                if model.actionPanelOpen {
+                    ActionPanelView(model: model)
+                        .padding(.trailing, 14)
+                        .padding(.bottom, 4)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var pageContent: some View {
         switch model.page {
         case .main: resultList
         case .files: fileList
-        case .emoji: EmojiGridView(model: model)
+        case .extension:
+            if let page = model.extensionPage {
+                GridPageView(model: model, content: page.content)
+            }
         case .clipboard: ClipboardPageView(model: model)
         case .assistant: AssistantPageView(model: model)
         case .uninstall: UninstallPageView(model: model)
@@ -149,13 +162,6 @@ struct LauncherView: View {
                     }
                 }
                 .padding(.horizontal, 10)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if model.actionPanelOpen, let item = model.selectedResult {
-                    ActionPanelView(model: model, item: item)
-                        .padding(.trailing, 14)
-                        .padding(.bottom, 4)
-                }
             }
             .onChange(of: model.selectedIndex) { _ in
                 guard model.results.indices.contains(model.selectedIndex) else { return }
@@ -198,7 +204,7 @@ struct LauncherView: View {
                 .font(model.theme.font(.callout))
                 .foregroundStyle(model.theme.textColor.alpha(0.6))
             Spacer()
-            if model.selectedResult?.hasActions == true {
+            if model.selectedItem?.hasActions == true {
                 Text("Actions ⌘K")
                     .font(model.theme.font(.callout))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
@@ -216,7 +222,7 @@ struct LauncherView: View {
         case .main: return "HeyCast"
         case .files: return "File search"
         case .clipboard: return "Clipboard"
-        case .emoji: return "Emoji"
+        case .extension: return model.extensionPage?.title ?? ""
         case .assistant: return "Assistant"
         case .uninstall: return model.uninstallTarget.map { "Uninstall \($0.name)" } ?? "Uninstall"
         }
@@ -344,14 +350,23 @@ struct RightClickCatcher: NSViewRepresentable {
 
 struct ActionPanelView: View {
     @ObservedObject var model: LauncherModel
-    let item: ResultItem
 
     var body: some View {
-        VStack(spacing: 0) {
-            ForEach(Array(item.actions.enumerated()), id: \.offset) { index, action in
-                row(action, selected: index == model.actionPanelIndex)
+        VStack(alignment: .leading, spacing: 0) {
+            if let submenu = model.actionPanelSubmenu {
+                Text(submenu.title)
+                    .font(model.theme.font(.subheadlineEmphasized))
+                    .foregroundStyle(model.theme.textColor.alpha(0.5))
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
+            }
+            ForEach(Array(model.actionPanelActions.enumerated()), id: \.offset) { index, action in
+                row(action, isPrimary: index == 0 && model.actionPanelSubmenu == nil,
+                    selected: index == model.actionPanelIndex)
                     .contentShape(Rectangle())
-                    .onTapGesture { model.perform(action, on: item) }
+                    .onTapGesture {
+                        if let item = model.selectedItem { model.perform(action, on: item) }
+                    }
                     .onHover { if $0 { model.actionPanelIndex = index } }
             }
         }
@@ -368,7 +383,7 @@ struct ActionPanelView: View {
         )
     }
 
-    private func row(_ action: ItemAction, selected: Bool) -> some View {
+    private func row(_ action: ItemAction, isPrimary: Bool, selected: Bool) -> some View {
         let tint = action.style == .destructive ? Color.red : model.theme.textColor
         return HStack(spacing: 8) {
             Image(systemName: action.symbolName ?? "circle")
@@ -380,11 +395,15 @@ struct ActionPanelView: View {
                 .foregroundStyle(tint)
                 .lineLimit(1)
             Spacer(minLength: 8)
-            if let shortcut = action.shortcut {
+            if !action.children.isEmpty {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(model.theme.textColor.alpha(0.45))
+            } else if let shortcut = action.shortcut {
                 Text(shortcut.displayString)
                     .font(model.theme.font(.subheadline))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
-            } else if action == item.actions.first {
+            } else if isPrimary {
                 Text("↵")
                     .font(model.theme.font(.subheadline))
                     .foregroundStyle(model.theme.textColor.alpha(0.45))
