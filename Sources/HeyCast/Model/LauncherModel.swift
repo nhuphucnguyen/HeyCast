@@ -63,6 +63,7 @@ final class LauncherModel: ObservableObject {
     let assistantService = AssistantService()
     let fileSearchService = FileSearchService()
     let calendarService = CalendarService()
+    let extensions = ExtensionRegistry()
 
     // MARK: window/session state (wired by PanelController/AppDelegate)
     var frontmostApp: NSRunningApplication?
@@ -520,17 +521,7 @@ final class LauncherModel: ObservableObject {
             }
         }
 
-        // Tiling actions
-        for tile in TilingPosition.allCases {
-            if let s = FuzzyMatch.score(query, tile.displayName.lowercased()) {
-                out.append(ResultItem(id: "tile-\(tile.rawValue)",
-                                      title: tile.displayName,
-                                      subtitle: "Window Tiling",
-                                      icon: .symbol(tile.symbolName),
-                                      action: .tile(tile)))
-                _ = s
-            }
-        }
+        out.append(contentsOf: extensions.results(for: query, phase: .search, ctx: self))
 
         // Quit …
         if query.lowercased().hasPrefix("quit") {
@@ -553,76 +544,12 @@ final class LauncherModel: ObservableObject {
             }
         }
 
-        // Deferred classifiers are shown when nothing else matched.
+        // Instant answers and fallbacks are shown when nothing else matched.
         if out.isEmpty {
-            out = deferredResults(for: query)
+            out = extensions.results(for: query, phase: .instantAnswer, ctx: self)
+                + extensions.results(for: query, phase: .fallback, ctx: self)
         }
         return Array(out.prefix(30))
-    }
-
-    /// URL / unit conversion / calculator / web-search rows.
-    private func deferredResults(for query: String) -> [ResultItem] {
-        var out: [ResultItem] = []
-
-        if isURLLike(query) {
-            let urlString = query.hasPrefix("http://") || query.hasPrefix("https://") ? query : "https://" + query
-            if let url = URL(string: urlString) {
-                out.append(ResultItem(id: "url-\(query)",
-                                      title: "Open \(url.host ?? query)",
-                                      subtitle: "Website",
-                                      icon: .symbol("globe"),
-                                      action: .openURL(url)))
-            }
-        }
-
-        if let conversions = UnitConversion.convert(query) {
-            for conversion in conversions.prefix(8) {
-                out.append(ResultItem(id: "unit-\(query)-\(conversion.targetUnit)",
-                                      title: "\(conversion.value) \(conversion.targetUnit)",
-                                      subtitle: conversion.sourceDescription,
-                                      icon: .symbol("ruler"),
-                                      action: .copyText("\(conversion.value) \(conversion.targetUnit)")))
-            }
-        }
-
-        if let value = Calculator.evaluate(query) {
-            out.append(ResultItem(id: "calc-\(query)",
-                                  title: Calculator.format(value),
-                                  subtitle: query,
-                                  icon: .symbol("equal.square"),
-                                  action: .copyText(Calculator.format(value))))
-        }
-
-        let wordCount = query.split(separator: " ").count
-        if query.hasSuffix("?") || wordCount >= 3 {
-            let searchTerms = query.hasSuffix("?") ? String(query.dropLast()) : query
-            if let url = searchURL(for: searchTerms) {
-                out.append(ResultItem(id: "web-\(query)",
-                                      title: "Search for: \(searchTerms)",
-                                      subtitle: "Web Search",
-                                      icon: .symbol("magnifyingglass"),
-                                      action: .openURL(url)))
-            }
-        }
-        return out
-    }
-
-    private func searchURL(for terms: String) -> URL? {
-        let encoded = terms.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)?
-            .replacingOccurrences(of: " ", with: "+") ?? terms
-        let template = config.searchURL
-        return URL(string: template.replacingOccurrences(of: "%s", with: encoded))
-    }
-
-    private func isURLLike(_ query: String) -> Bool {
-        let trimmed = query.trimmingCharacters(in: .whitespaces)
-        if trimmed.contains(where: { $0.isWhitespace }) { return false }
-        if trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") { return true }
-        // crude reversed-TLD heuristic: something.tld
-        guard let dotRange = trimmed.range(of: ".", options: .backwards) else { return false }
-        let tld = trimmed[dotRange.upperBound...]
-        let host = trimmed[..<dotRange.lowerBound]
-        return tld.count >= 2 && tld.allSatisfy(\.isLetter) && !host.isEmpty
     }
 
     private func easterEggResult(for query: String) -> ResultItem? {
@@ -665,18 +592,8 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("crown"), action: .openURL(URL(string: "https://ferris.rs")!)),
         ]
         // favourites toggle hint for app rows is handled in the row UI
-        out.append(contentsOf: builtinTileResults())
+        out.append(contentsOf: extensions.commands(self))
         return out
-    }
-
-    private func builtinTileResults() -> [ResultItem] {
-        TilingPosition.allCases.map { tile in
-            ResultItem(id: "tile-\(tile.rawValue)",
-                       title: tile.displayName,
-                       subtitle: "Window Tiling",
-                       icon: .symbol(tile.symbolName),
-                       action: .tile(tile))
-        }
     }
 
     // MARK: - actions
@@ -1380,3 +1297,5 @@ enum ShellRunner {
         try? process.run()
     }
 }
+
+extension LauncherModel: ExtensionContext {}
