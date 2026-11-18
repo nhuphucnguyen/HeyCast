@@ -60,7 +60,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSCalendarsUsageDescription</key>
     <string>HeyCast can show your upcoming calendar events on the empty launcher page.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>HeyCast asks Finder to move protected files to the Trash when you uninstall an app.</string>
+    <string>HeyCast asks Finder to move protected files to the Trash when you uninstall an app, and asks your browser for the current page URL when you capture a note.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

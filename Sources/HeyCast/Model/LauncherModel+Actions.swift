@@ -201,6 +201,10 @@ extension LauncherModel: ExtensionContext {
         ExtensionStore(extensionID: extensionID)
     }
 
+    func clearQuery() {
+        query = ""
+    }
+
     func reloadPage() {
         guard extensionPage != nil else { return }
         let selectedID = selectedItem?.id

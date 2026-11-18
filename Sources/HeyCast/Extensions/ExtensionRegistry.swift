@@ -10,6 +10,7 @@ struct ExtensionRegistry {
         WebExtension.Search(),
         FilesExtension(),
         EmojiExtension(),
+        NotesExtension(),
     ]
 
     func page(_ extensionID: String) -> ExtensionPage? {

@@ -22,6 +22,9 @@ extension HeyCastExtension {
 }
 
 enum ResultPhase {
+    // Takes over the main page (e.g. a capture prefix): when any provider
+    // returns rows here, they are the only rows shown.
+    case claim
     case search
     // Only when no .search row matched.
     case instantAnswer
@@ -47,4 +50,5 @@ protocol ExtensionContext: AnyObject {
     func signalFailure()
     func store(for extensionID: String) -> ExtensionStore
     func reloadPage()
+    func clearQuery()
 }

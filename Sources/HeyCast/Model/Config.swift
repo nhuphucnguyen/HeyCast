@@ -127,6 +127,10 @@ struct Config: Codable, Equatable {
     var restoreInputSourceOnClose: Bool = true
     var agents: [AgentConfig] = []
     var defaultAgent: String? = nil  // alias of the agent ⌘↵ / the ask page use
+    // Notes capture prefixes typed in the main search; "" disables one.
+    var notesInboxPrefix: String = ";"
+    var notesWordPrefix: String = "w "
+    var notesNotePrefix: String = "n "
 
     init() {}
 
@@ -166,6 +170,9 @@ struct Config: Codable, Equatable {
         if let v = try c.decodeIfPresent(Bool.self, forKey: .restoreInputSourceOnClose) { restoreInputSourceOnClose = v }
         if let v = try c.decodeIfPresent([AgentConfig].self, forKey: .agents) { agents = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .defaultAgent) { defaultAgent = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = v }
     }
 
     static let directory: URL = {

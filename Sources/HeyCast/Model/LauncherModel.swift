@@ -460,6 +460,9 @@ final class LauncherModel: ObservableObject {
             return [egg]
         }
 
+        let claimed = extensions.results(for: rawQuery, phase: .claim, ctx: self)
+        if !claimed.isEmpty { return claimed }
+
         var out: [ResultItem] = []
 
         // App fuzzy search
