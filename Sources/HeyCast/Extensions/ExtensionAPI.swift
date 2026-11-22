@@ -51,6 +51,8 @@ protocol ExtensionContext: AnyObject {
     func store(for extensionID: String) -> ExtensionStore
     func reloadPage()
     func clearQuery()
+    /// Fills the search bar (e.g. a trigger carrying its argument into a page).
+    func setQuery(_ text: String)
     /// Re-runs main-page result assembly — extensions call this when data a
     /// .claim provider shows (e.g. a network feed) has arrived asynchronously.
     func refreshMainResults()
@@ -62,4 +64,5 @@ protocol ExtensionContext: AnyObject {
 extension ExtensionContext {
     func refreshMainResults() {}
     func openPage(_ extensionID: String) {}
+    func setQuery(_ text: String) {}
 }

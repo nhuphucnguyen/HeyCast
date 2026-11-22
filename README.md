@@ -169,9 +169,10 @@ triggers, or these keys): `assistantPrefix` (default `/` — `"/alias question"`
 routes to that agent), `notesInboxPrefix` / `notesWordPrefix` /
 `notesNotePrefix` (default `/t `, `/w `, `/n `; empty disables — todo/thought,
 vocabulary and titled-note capture) and `tcPrefix` (default `/tc`). Typing a
-partial trigger lists suggestions (e.g. "/" shows them all, "/t" narrows to
-the inbox capture and the feed); ↵ completes capture/assistant triggers,
-the feed opens right away. The `/tc`
+partial trigger lists suggestions with the command as the row title; ↵/click
+runs the command — capture and assistant triggers complete into the search
+bar, the TC trigger opens its reader (a filter typed after `/tc` carries
+over). The `/tc`
 feed also reads `tcCookiePath`, `tcAuthor`, `tcRootSpaceID`, `tcSpaces`
 (space ids fetched from the navigation menu by default list) and
 `tcRefreshMinutes` (min 5).

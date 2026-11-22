@@ -77,9 +77,10 @@ final class ThanhCongExtension: HeyCastExtension, ExtensionPage {
                     searchName: "thanh cong tc", action: .switchPage(.extension(id)))]
     }
 
-    /// "<tcPrefix>" takes over the main page with the latest posts; appending
-    /// text narrows them. Rows appear immediately from the disk cache, and a
-    /// stale feed refreshes in the background.
+    /// "<tcPrefix>" claims the main search like every other trigger: it shows
+    /// the command row and waits — ↵ / click opens the reader (carrying any
+    /// filter typed after the trigger). The fetch is only warmed here so the
+    /// reader opens with content.
     private struct ClaimProvider: ResultProvider {
         unowned let owner: ThanhCongExtension
         let phase = ResultPhase.claim
@@ -96,22 +97,40 @@ final class ThanhCongExtension: HeyCastExtension, ExtensionPage {
     fileprivate func claimResults(rawQuery: String, ctx: ExtensionContext) -> [ResultItem] {
         self.ctx = ctx
         lastConfig = ctx.config
-        markFeedEntry()
         ensureFresh(ctx: ctx)
-        // "<tcPrefix>" exists to open the reader — jump straight to the page.
-        // The rows built below are only a fallback; once the page is up they
-        // are never displayed.
-        ctx.openPage(id)
 
         let prefix = ctx.config.tcPrefix.trimmingCharacters(in: .whitespaces)
         let filter = rawQuery.lowercased().hasPrefix((prefix + " ").lowercased())
             ? String(rawQuery.dropFirst(prefix.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
-        let posts = filteredPosts(filter)
-        var rows = posts.prefix(12).map { postRow($0) }
-        if posts.isEmpty { rows.append(noMatchRow(filter)) }
-        if let statusRow { rows.append(statusRow) }
-        return rows
+        return [openReaderRow(filter: filter)]
+    }
+
+    /// The "/tc" command row — the trigger waits for ↵ / click, which opens
+    /// the reader (carrying any filter typed after the trigger).
+    private func openReaderRow(filter: String) -> ResultItem {
+        var subtitle: String
+        switch status {
+        case .loading:
+            subtitle = "Fetching the feed…"
+        case .unauthorized:
+            subtitle = "Session expired — open the reader for re-export instructions"
+        case .failed(let message):
+            subtitle = "Last refresh failed (\(message)) — the reader can retry"
+        default:
+            if let feed {
+                subtitle = "\(feed.posts.count) posts · updated \(Self.ago(feed.fetchedAt))"
+            } else {
+                subtitle = "Community reader — newest posts of \(lastConfig.tcAuthor)"
+            }
+        }
+        if !filter.isEmpty { subtitle += " · filter “\(filter)”" }
+        return ResultItem(id: "tc-open-reader",
+                          title: "Open Thanh Cong TC Reader",
+                          subtitle: subtitle,
+                          icon: .symbol(symbolName),
+                          actions: [ItemAction("Open Reader", symbolName: "newspaper",
+                                               kind: run("open-reader", filter))])
     }
 
     // MARK: - ExtensionPage (full reader)
@@ -142,6 +161,11 @@ final class ThanhCongExtension: HeyCastExtension, ExtensionPage {
 
     func perform(_ key: String, payload: String, ctx: ExtensionContext) {
         switch key {
+        case "open-reader":
+            // The "/tc" command: open the reader, carrying a typed filter.
+            ctx.openPage(id)
+            if !payload.isEmpty { ctx.setQuery(payload) }
+            return
         case "refresh":
             ensureFresh(ctx: ctx, force: true)
             ctx.reloadPage()

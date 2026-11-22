@@ -216,6 +216,10 @@ extension LauncherModel: ExtensionContext {
         switchPage(.extension(extensionID))
     }
 
+    func setQuery(_ text: String) {
+        query = text
+    }
+
     func reloadPage() {
         guard extensionPage != nil else { return }
         let selectedID = selectedItem?.id
