@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 protocol ExtensionPage: AnyObject {
@@ -12,11 +13,17 @@ protocol ExtensionPage: AnyObject {
     func didAppear(ctx: ExtensionContext)
     func didDisappear()
     func queryChanged(_ query: String, ctx: ExtensionContext)
+    // A protocol requirement (not just a default) so existential dispatch
+    // reaches the concrete override — see pageView in the extension below.
+    func pageView(model: LauncherModel) -> AnyView?
 }
 
 extension ExtensionPage {
     var preferredSize: NSSize? { nil }
     func didDisappear() {}
+    /// Custom full-page SwiftUI rendering (a reader with a preview pane,
+    /// say). nil → the page falls back to content.layout (list/grid).
+    func pageView(model: LauncherModel) -> AnyView? { nil }
 }
 
 struct ItemSection {

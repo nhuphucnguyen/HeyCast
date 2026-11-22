@@ -51,4 +51,15 @@ protocol ExtensionContext: AnyObject {
     func store(for extensionID: String) -> ExtensionStore
     func reloadPage()
     func clearQuery()
+    /// Re-runs main-page result assembly — extensions call this when data a
+    /// .claim provider shows (e.g. a network feed) has arrived asynchronously.
+    func refreshMainResults()
+    /// Opens an extension page from the main page (e.g. "/tc" jumping
+    /// straight into its reader instead of listing rows inline).
+    func openPage(_ extensionID: String)
+}
+
+extension ExtensionContext {
+    func refreshMainResults() {}
+    func openPage(_ extensionID: String) {}
 }

@@ -131,6 +131,15 @@ struct Config: Codable, Equatable {
     var notesInboxPrefix: String = ";"
     var notesWordPrefix: String = "w "
     var notesNotePrefix: String = "n "
+    // Thanh Cong TC feed (/tc) — read-only Mighty Networks reader. The data
+    // access rules are documented in the thanhcongtc repo
+    // (docs/mighty-networks-data-access.md): browser-session cookies in a
+    // Netscape jar, GETs only, client-side author filter.
+    var tcCookiePath: String = "~/.cache/thanhcongtc.cookies.txt"
+    var tcAuthor: String = "Thanh Cong Vu"
+    var tcRootSpaceID: Int = 23859093
+    var tcSpaces: [Int] = [23941095, 23877153, 23894431, 24278852]
+    var tcRefreshMinutes: Int = 15
 
     init() {}
 
@@ -173,6 +182,11 @@ struct Config: Codable, Equatable {
         if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .tcCookiePath) { tcCookiePath = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .tcAuthor) { tcAuthor = v }
+        if let v = try c.decodeIfPresent(Int.self, forKey: .tcRootSpaceID) { tcRootSpaceID = v }
+        if let v = try c.decodeIfPresent([Int].self, forKey: .tcSpaces) { tcSpaces = v }
+        if let v = try c.decodeIfPresent(Int.self, forKey: .tcRefreshMinutes), (5...1440).contains(v) { tcRefreshMinutes = v }
     }
 
     static let directory: URL = {

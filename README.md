@@ -51,6 +51,22 @@ pure Apple frameworks so every feature leans on the platform directly.
   Inbox, Words, Notes and Resolved, with ⌘↵ to resolve, ⇧⌘P to pin, ⌃X to
   delete (restorable for 30 days) and ⌘K for the rest. Stored in `notes.db`
   (SQLite, WAL, full-text search). Roadmap: [docs/notes-plan.md](docs/notes-plan.md).
+- Thanh Cong TC feed (`/tc`) — quick reader for the closed community on
+  `thanhcongtc.mn.co` (Mighty Networks). Typing `/tc` jumps straight into a
+  dedicated reader: posts of **Thanh Cong Vu** (same default as the HTML
+  digest; a toggle at the bottom includes everyone) in a compact day-grouped
+  list on the left, and the selected post's actual content on the right —
+  real HTML (images, quotes, lists) rendered in a themed, JavaScript-less
+  web view — so you can decide whether to open it. Type to filter
+  (diacritics-insensitive); reading happens in place (↵/click just selects),
+  ⌘O or the safari icon opens the post on the web, ⌘C copies the link.
+  🆕 marks what appeared since the last viewing session. Data access follows
+  the notes in the separate `thanhcongtc` repo
+  (`docs/mighty-networks-data-access.md`): the browser session cookies from
+  a Netscape cookie jar (default `~/.cache/thanhcongtc.cookies.txt`), GETs
+  only, results cached to `thanhcongtc-feed.json` and refreshed at most
+  every 15 minutes. When the session expires (401) the feed says so with
+  re-export instructions instead of failing silently.
 - Assistant — fire-and-forget AI requests with an inbox. Configure agents
   (Hermes, any OpenAI-compatible API, the Anthropic API, or an MCP
   streamable-HTTP server) in Settings → Assistant, then:
@@ -148,13 +164,16 @@ font), `shells` (`{command, alias, hotkey?}`), `modes` (`name → script`),
 `aliases` (`input → expanded query`), `blacklist`, `searchDirs`. Usage ranking
 lives in `ranking.json` next to it, clipboard history in `clipboard.db`, notes in `notes.db`.
 `notesInboxPrefix` / `notesWordPrefix` / `notesNotePrefix` (default `;`, `w `,
-`n `; empty disables) set the capture prefixes.
+`n `; empty disables) set the capture prefixes. The `/tc` feed reads
+`tcCookiePath`, `tcAuthor`, `tcRootSpaceID`, `tcSpaces` (space ids fetched
+from the navigation menu by default list) and `tcRefreshMinutes` (min 5).
 
 ## URL scheme
 
 `heycast://show`, `heycast://toggle`, `heycast://quit`,
-`heycast://open?target=safari`, `heycast://page?name=emoji|clipboard|files|notes`,
-`heycast://query?text=…`, `heycast://settings` plus debug helpers
+`heycast://open?target=safari`, `heycast://page?name=emoji|clipboard|files|notes|tc`,
+`heycast://query?text=…` (so `heycast://query?text=%2Ftc` pops the feed open),
+`heycast://settings` plus debug helpers
 (`screenshot`, `capture` write window PNGs to `/tmp`).
 
 ## Project layout

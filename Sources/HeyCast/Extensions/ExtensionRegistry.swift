@@ -11,6 +11,7 @@ struct ExtensionRegistry {
         FilesExtension(),
         EmojiExtension(),
         NotesExtension(),
+        ThanhCongExtension(),
     ]
 
     func page(_ extensionID: String) -> ExtensionPage? {

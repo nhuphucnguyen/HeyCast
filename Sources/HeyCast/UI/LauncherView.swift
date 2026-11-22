@@ -140,10 +140,14 @@ struct LauncherView: View {
         switch model.page {
         case .main: resultList
         case .extension:
-            if let content = model.extensionPage?.content {
-                switch content.layout {
-                case .list: ListPageView(model: model, content: content)
-                case .grid: GridPageView(model: model, content: content)
+            if let page = model.extensionPage {
+                if let custom = page.pageView(model: model) {
+                    custom
+                } else {
+                    switch page.content.layout {
+                    case .list: ListPageView(model: model, content: page.content)
+                    case .grid: GridPageView(model: model, content: page.content)
+                    }
                 }
             }
         case .clipboard: ClipboardPageView(model: model)
