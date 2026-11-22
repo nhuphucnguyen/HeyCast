@@ -42,6 +42,7 @@ enum ResultAction: Equatable {
     case openEvent(String) // calendar identifier
     case display
     case askAgent(alias: String, text: String) // fire-and-forget assistant request
+    case setQuery(String) // fill the search bar (trigger suggestions)
     case `extension`(id: String, key: String, payload: String)
 }
 

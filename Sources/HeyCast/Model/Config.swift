@@ -128,9 +128,14 @@ struct Config: Codable, Equatable {
     var agents: [AgentConfig] = []
     var defaultAgent: String? = nil  // alias of the agent ⌘↵ / the ask page use
     // Notes capture prefixes typed in the main search; "" disables one.
-    var notesInboxPrefix: String = ";"
-    var notesWordPrefix: String = "w "
-    var notesNotePrefix: String = "n "
+    // Trigger prefixes are unified: special triggers always start with "@"
+    // or "/" ("/" is the default style). Values saved by older builds that
+    // still equal the old defaults migrate to the new slash defaults.
+    var assistantPrefix: String = "/"       // "/alias question" (was "@" hardcoded)
+    var notesInboxPrefix: String = "/t "    // todo/thought capture (was ";")
+    var notesWordPrefix: String = "/w "     // vocabulary capture (was "w ")
+    var notesNotePrefix: String = "/n "     // titled note capture (was "n ")
+    var tcPrefix: String = "/tc"            // Thanh Cong TC feed
     // Thanh Cong TC feed (/tc) — read-only Mighty Networks reader. The data
     // access rules are documented in the thanhcongtc repo
     // (docs/mighty-networks-data-access.md): browser-session cookies in a
@@ -179,9 +184,11 @@ struct Config: Codable, Equatable {
         if let v = try c.decodeIfPresent(Bool.self, forKey: .restoreInputSourceOnClose) { restoreInputSourceOnClose = v }
         if let v = try c.decodeIfPresent([AgentConfig].self, forKey: .agents) { agents = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .defaultAgent) { defaultAgent = v }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = v }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = v }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = v }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = Self.migratedTrigger(v, oldDefault: ";", newDefault: "/t ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = Self.migratedTrigger(v, oldDefault: "w ", newDefault: "/w ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = Self.migratedTrigger(v, oldDefault: "n ", newDefault: "/n ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .assistantPrefix) { assistantPrefix = Self.migratedTrigger(v, oldDefault: "", newDefault: "/") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .tcPrefix) { tcPrefix = Self.migratedTrigger(v, oldDefault: "", newDefault: "/tc") }
         if let v = try c.decodeIfPresent(String.self, forKey: .tcCookiePath) { tcCookiePath = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .tcAuthor) { tcAuthor = v }
         if let v = try c.decodeIfPresent(Int.self, forKey: .tcRootSpaceID) { tcRootSpaceID = v }
@@ -222,6 +229,27 @@ struct Config: Codable, Equatable {
             try? FileManager.default.copyItem(at: fileURL, to: backup)
             return defaults
         }
+    }
+
+    // MARK: - search trigger prefixes
+
+    /// Unified trigger style: special triggers always start with "@" or "/",
+    /// or are empty (which disables a notes capture trigger). Anything else —
+    /// including values saved before the unification that match the old
+    /// defaults — falls back to the new default.
+    static func migratedTrigger(_ stored: String, oldDefault: String, newDefault: String) -> String {
+        if stored.isEmpty { return oldDefault.isEmpty ? newDefault : stored }
+        if stored == oldDefault { return newDefault }
+        if stored.hasPrefix("@") || stored.hasPrefix("/") { return stored }
+        return newDefault
+    }
+
+    /// Same rule for values edited in Settings (applied before saving).
+    static func sanitizedTrigger(_ value: String, fallback: String, allowEmpty: Bool) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty { return allowEmpty ? "" : fallback }
+        if trimmed.hasPrefix("@") || trimmed.hasPrefix("/") { return value }
+        return fallback
     }
 
     func save() {

@@ -77,16 +77,18 @@ final class ThanhCongExtension: HeyCastExtension, ExtensionPage {
                     searchName: "thanh cong tc", action: .switchPage(.extension(id)))]
     }
 
-    /// "/tc" takes over the main page with the latest posts; "/tc <text>"
-    /// narrows them. Rows appear immediately from the disk cache, and a
+    /// "<tcPrefix>" takes over the main page with the latest posts; appending
+    /// text narrows them. Rows appear immediately from the disk cache, and a
     /// stale feed refreshes in the background.
     private struct ClaimProvider: ResultProvider {
         unowned let owner: ThanhCongExtension
         let phase = ResultPhase.claim
 
         func results(for query: String, ctx: ExtensionContext) -> [ResultItem] {
+            let prefix = ctx.config.tcPrefix.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !prefix.isEmpty else { return [] }
             let lowered = query.lowercased()
-            guard lowered == "/tc" || lowered.hasPrefix("/tc ") else { return [] }
+            guard lowered == prefix || lowered.hasPrefix(prefix + " ") else { return [] }
             return owner.claimResults(rawQuery: query, ctx: ctx)
         }
     }
@@ -96,13 +98,14 @@ final class ThanhCongExtension: HeyCastExtension, ExtensionPage {
         lastConfig = ctx.config
         markFeedEntry()
         ensureFresh(ctx: ctx)
-        // "/tc" exists to open the reader — jump straight to the page. The
-        // rows built below are only a fallback; once the page is up they are
-        // never displayed.
+        // "<tcPrefix>" exists to open the reader — jump straight to the page.
+        // The rows built below are only a fallback; once the page is up they
+        // are never displayed.
         ctx.openPage(id)
 
-        let filter = rawQuery.lowercased().hasPrefix("/tc ")
-            ? String(rawQuery.dropFirst(4)).trimmingCharacters(in: .whitespacesAndNewlines)
+        let prefix = ctx.config.tcPrefix.trimmingCharacters(in: .whitespaces)
+        let filter = rawQuery.lowercased().hasPrefix((prefix + " ").lowercased())
+            ? String(rawQuery.dropFirst(prefix.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
             : ""
         let posts = filteredPosts(filter)
         var rows = posts.prefix(12).map { postRow($0) }

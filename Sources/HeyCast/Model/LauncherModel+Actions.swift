@@ -67,6 +67,9 @@ extension LauncherModel {
             CalendarService.openInCalendar()
             hide()
 
+        case let .setQuery(text):
+            query = text
+
         case let .extension(id, key, payload):
             extensions.perform(extensionID: id, key: key, payload: payload, ctx: self)
 

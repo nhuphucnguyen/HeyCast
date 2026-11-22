@@ -463,6 +463,12 @@ final class LauncherModel: ObservableObject {
         let claimed = extensions.results(for: rawQuery, phase: .claim, ctx: self)
         if !claimed.isEmpty { return claimed }
 
+        // Partial trigger ("/", "/t", "/gl"…): list the special triggers it
+        // could complete to. Once a trigger is complete enough for its owner
+        // (claim, agent request) that owner takes over instead.
+        let suggestions = triggerSuggestions(for: rawQuery)
+        if !suggestions.isEmpty { return suggestions }
+
         var out: [ResultItem] = []
 
         // App fuzzy search
@@ -538,8 +544,64 @@ final class LauncherModel: ObservableObject {
         return Array(out.prefix(30))
     }
 
-    private func easterEggResult(for query: String) -> ResultItem? {
-        switch query {
+    /// When the query is a partial trigger — "/", "/t", "/gl", "@h"… — list
+    /// the special triggers it could complete to: the TC feed, the note
+    /// captures and every agent. The row title IS the trigger (that's what
+    /// the user types); the description sits on the right. Selecting a
+    /// capture/agent suggestion fills the search bar with the trigger so
+    /// typing continues; the feed opens right away. Exact triggers are
+    /// skipped here — their owners handle them (claim / capture hint /
+    /// agent ask-row).
+    private func triggerSuggestions(for query: String) -> [ResultItem] {
+        let lowered = query.lowercased()
+        guard !lowered.isEmpty else { return [] }
+
+        var suggestions: [(sortKey: String, row: ResultItem)] = []
+        /// `match` is what completes the trigger (trailing space included);
+        /// `title` is the short command shown to the user.
+        func suggest(_ match: String, _ title: String, _ subtitle: String,
+                     _ symbol: String, _ action: ResultAction?) {
+            let trimmed = match.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return }
+            let m = match.lowercased()
+            guard m.hasPrefix(lowered), lowered != m else { return }
+            suggestions.append((title, ResultItem(id: "trigger-\(title)-\(symbol)",
+                                                  title: title, subtitle: subtitle,
+                                                  icon: .symbol(symbol), action: action ?? .display)))
+        }
+
+        let tcPrefix = config.tcPrefix.trimmingCharacters(in: .whitespaces)
+        suggest(tcPrefix, tcPrefix, "Thanh Cong TC Feed — open the community reader",
+                "newspaper", .switchPage(.extension("tc")))
+
+        if !config.notesInboxPrefix.isEmpty {
+            suggest(config.notesInboxPrefix, config.notesInboxPrefix.trimmingCharacters(in: .whitespaces),
+                    "Add to Inbox — what's on your mind, saved for later",
+                    "tray.and.arrow.down", .setQuery(config.notesInboxPrefix))
+        }
+        if !config.notesWordPrefix.isEmpty {
+            suggest(config.notesWordPrefix, config.notesWordPrefix.trimmingCharacters(in: .whitespaces),
+                    "Save Word — word + example sentence",
+                    "character.book.closed", .setQuery(config.notesWordPrefix))
+        }
+        if !config.notesNotePrefix.isEmpty {
+            suggest(config.notesNotePrefix, config.notesNotePrefix.trimmingCharacters(in: .whitespaces),
+                    "Create Note — opens the note editor",
+                    "square.and.pencil", .setQuery(config.notesNotePrefix))
+        }
+        if !config.assistantPrefix.isEmpty {
+            for agent in config.agents where !agent.alias.isEmpty {
+                let match = config.assistantPrefix + agent.alias + " "
+                suggest(match, config.assistantPrefix + agent.alias,
+                        "Ask \(agent.name) — the answer lands in the inbox",
+                        "sparkles", .setQuery(match))
+            }
+        }
+
+        return suggestions.sorted { $0.sortKey < $1.sortKey }.map(\.row)
+    }
+
+    private func easterEggResult(for query: String) -> ResultItem? {        switch query {
         case "randomvar":
             let n = Int.random(in: 0...100)
             return ResultItem(id: "egg-randomvar", title: "\(n)", subtitle: "Easter egg",
@@ -907,12 +969,16 @@ final class LauncherModel: ObservableObject {
         return image
     }
 
-    /// Routes "@alias question" typed in the main bar; nil when the query
-    /// isn't an agent request (or the alias is unknown). Matches as soon as
-    /// the space after the alias is typed — `text` may still be empty.
+    /// Routes "<assistantPrefix><alias> question" typed in the main bar —
+    /// "/hermes what is X" by default; "@" keeps working when configured.
+    /// Matches as soon as the space after the alias is typed — `text` may
+    /// still be empty.
     private func agentRequest(in query: String) -> (agent: AgentConfig, text: String)? {
-        guard query.hasPrefix("@"), let space = query.firstIndex(of: " ") else { return nil }
-        let alias = String(query[query.index(after: query.startIndex)..<space])
+        let prefix = config.assistantPrefix
+        guard !prefix.isEmpty, query.hasPrefix(prefix), let space = query.firstIndex(of: " ") else { return nil }
+        let aliasStart = query.index(query.startIndex, offsetBy: prefix.count)
+        guard aliasStart < space else { return nil }
+        let alias = String(query[aliasStart..<space])
         guard let agent = agent(forAlias: alias) else { return nil }
         let text = query[query.index(after: space)...].trimmingCharacters(in: .whitespacesAndNewlines)
         return (agent, text)

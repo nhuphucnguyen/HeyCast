@@ -112,6 +112,19 @@ struct SettingsView: View {
         }
     }
 
+    /// Trigger prefixes sanitize themselves on submit: they must start with
+    /// "@" or "/", or be empty where that's allowed (see Config).
+    private func triggerField(_ label: String, value: Binding<String>,
+                              fallback: String, allowEmpty: Bool) -> some View {
+        TextField(label, text: value)
+            .onSubmit {
+                value.wrappedValue = Config.sanitizedTrigger(value.wrappedValue,
+                                                             fallback: fallback,
+                                                             allowEmpty: allowEmpty)
+                persist()
+            }
+    }
+
     // MARK: general
 
     private var generalTab: some View {
@@ -132,6 +145,19 @@ struct SettingsView: View {
                 }
                 .onChange(of: draft.mainPage) { _ in persist() }
                 Toggle("Show tray icon", isOn: $draft.showTrayIcon).onChange(of: draft.showTrayIcon) { _ in persist() }
+            }
+            Section("Search triggers") {
+                Text("Special triggers typed at the start of the search bar. They must begin with \"@\" or \"/\" — \"/\" is the default style. A trailing space is part of the capture triggers; empty disables one. Press Enter after editing.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                triggerField("Assistant — agent alias follows (e.g. \"/hermes …\")",
+                             value: $draft.assistantPrefix, fallback: "/", allowEmpty: false)
+                triggerField("Inbox capture — todo/thought (e.g. \"/t fix the tap\")",
+                             value: $draft.notesInboxPrefix, fallback: "/t ", allowEmpty: true)
+                triggerField("Word capture — vocabulary (e.g. \"/w serendipity — luck\")",
+                             value: $draft.notesWordPrefix, fallback: "/w ", allowEmpty: true)
+                triggerField("Note capture — opens the editor (e.g. \"/n Trip plan\")",
+                             value: $draft.notesNotePrefix, fallback: "/n ", allowEmpty: true)
+                triggerField("Thanh Cong TC feed", value: $draft.tcPrefix, fallback: "/tc", allowEmpty: false)
             }
             Section {
                 LabeledContent("Toggle HeyCast") {
@@ -230,7 +256,7 @@ struct SettingsView: View {
                         }
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("\(draft.agents[index].name)  ·  @\(draft.agents[index].alias)")
+                            Text("\(draft.agents[index].name)  ·  \(draft.assistantPrefix)\(draft.agents[index].alias)")
                                 .font(.system(size: 13, weight: .medium))
                             Text("\(draft.agents[index].type) — \(draft.agents[index].baseURL)")
                                 .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -245,7 +271,7 @@ struct SettingsView: View {
                 }
             }
             Section {
-                Text("Ask from anywhere: \"@alias your question\" + Enter, or ⌘↵ for the default agent. On the Assistant page, type and press Enter. The panel hides immediately; the answer arrives as a notification and waits in the Assistant inbox.")
+                Text("Ask from anywhere: \"\(draft.assistantPrefix)alias your question\" + Enter, or ⌘↵ for the default agent. On the Assistant page, type and press Enter. The panel hides immediately; the answer arrives as a notification and waits in the Assistant inbox.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Text("API keys are stored in config.json (~/Library/Application Support/HeyCast). Keep the file private; Keychain storage is planned.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -306,8 +332,8 @@ struct SettingsView: View {
     private var aliasClean: String {
         alias.trimmingCharacters(in: .whitespaces).lowercased()
     }
-    /// Aliases become the "@alias" prefix, so they can't contain whitespace;
-    /// use _ to separate words.
+    /// Aliases become the "<trigger>alias" prefix, so they can't contain
+    /// whitespace; use _ to separate words.
     private var aliasHasSpace: Bool {
         aliasClean.contains(where: { $0 == " " || $0 == "\t" })
     }
@@ -344,7 +370,7 @@ struct SettingsView: View {
                     .textFieldStyle(.roundedBorder)
                     .focused($nameFocused)
             }
-            field("Alias — you'll type @alias in the search bar (no spaces, use _)") {
+            field("Alias — typed after the assistant trigger (default \"/\") in the search bar (no spaces, use _)") {
                 HStack(spacing: 4) {
                     Text("@").foregroundStyle(.secondary)
                     TextField("hermes_assistant", text: $alias)
