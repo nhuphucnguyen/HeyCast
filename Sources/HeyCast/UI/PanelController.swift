@@ -8,11 +8,12 @@ final class LauncherPanel: NSPanel {
     override var canBecomeKey: Bool { true }
 }
 
-/// Panel background for macOS 26+: the system Liquid Glass material.
-/// Encapsulated in its own class because NSGlassEffectView can't be named in
-/// stored properties at a pre-26 deployment target.
+/// Liquid Glass background for macOS 26+: the system glass material.
+/// Shared by the launcher panel and the settings window. Encapsulated in
+/// its own class because NSGlassEffectView can't be named in stored
+/// properties at a pre-26 deployment target.
 @available(macOS 26.0, *)
-final class LauncherGlassView: NSView {
+final class GlassBackgroundView: NSView {
     private let glass = NSGlassEffectView()
 
     init(cornerRadius: CGFloat) {
@@ -144,7 +145,7 @@ final class PanelController: NSObject, NSWindowDelegate {
             installVibrancy()
         }
 
-        if #available(macOS 26.0, *), let glass = glassBackground as? LauncherGlassView {
+        if #available(macOS 26.0, *), let glass = glassBackground as? GlassBackgroundView {
             vibrancyView.isHidden = true
             glass.update(theme: model.theme)
         } else {
@@ -163,7 +164,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     private func installGlass() {
         guard #available(macOS 26.0, *) else { return }
-        let glass = LauncherGlassView(cornerRadius: Self.panelCornerRadius)
+        let glass = GlassBackgroundView(cornerRadius: Self.panelCornerRadius)
         glassBackground = glass
         glass.content = hostingView
         panel.contentView = glass

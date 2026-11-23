@@ -3,6 +3,26 @@ import SwiftUI
 
 enum SettingsTab: String, CaseIterable {
     case general, clipboard, assistant, appearance, commands
+
+    var title: String {
+        switch self {
+        case .general: return "General"
+        case .clipboard: return "Clipboard"
+        case .assistant: return "Assistant"
+        case .appearance: return "Appearance"
+        case .commands: return "Commands"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .general: return "switch.2"
+        case .clipboard: return "clipboard"
+        case .assistant: return "sparkles"
+        case .appearance: return "paintbrush"
+        case .commands: return "terminal"
+        }
+    }
 }
 
 /// Settings window with General / Clipboard / Assistant / Appearance /
@@ -20,26 +40,64 @@ final class SettingsWindowController {
         if window == nil {
             NSLog("HeyCast: creating settings window")
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 640, height: 560),
-                styleMask: [.titled, .closable],
+                contentRect: NSRect(x: 0, y: 0, width: 740, height: 560),
+                styleMask: [.titled, .closable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
             )
+            // Full-size content with a transparent titlebar so the glass
+            // material runs edge to edge (traffic lights float on it, like
+            // System Settings); dragging works via isMovableByWindowBackground
+            // and the window stays closable with ⌘W.
             window.title = "HeyCast Settings"
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
             window.identifier = NSUserInterfaceItemIdentifier(Self.windowIdentifier)
             window.isReleasedWhenClosed = false
+            window.isMovableByWindowBackground = true
+            window.isOpaque = false
+            window.backgroundColor = .clear
             window.center()
             window.level = .floating
             self.window = window
         }
+        window?.appearance = NSAppearance(named: model.theme.isDark ? .darkAqua : .aqua)
         // Rebuild the view on every open so the draft reflects changes made
-        // elsewhere (tray menu, edited config.json + Refresh) while closed.
-        window?.contentView = NSHostingView(rootView: SettingsView(model: model, initialTab: tab,
-                                                                  initialAdd: addAgent,
-                                                                  initialEditIndex: editAgentIndex))
+        // elsewhere (tray menu, edited config.json + Refresh) while closed,
+        // and so the background material follows the current theme config.
+        window?.contentView = Self.makeContentView(model: model, tab: tab, addAgent: addAgent, editAgentIndex: editAgentIndex)
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         NSLog("HeyCast: settings window shown (visible: %@)", String(window?.isVisible ?? false))
+    }
+
+    /// SwiftUI content over the system Liquid Glass material (macOS 26+,
+    /// when the config asks for it) or a vibrancy fallback — the same
+    /// background treatment as the launcher panel.
+    private static func makeContentView(model: LauncherModel, tab: SettingsTab,
+                                        addAgent: Bool, editAgentIndex: Int?) -> NSView {
+        let hosting = NSHostingView(rootView: SettingsView(model: model, initialTab: tab,
+                                                          initialAdd: addAgent,
+                                                          initialEditIndex: editAgentIndex))
+        if #available(macOS 26.0, *), model.config.theme.liquidGlass {
+            let glass = GlassBackgroundView(cornerRadius: 10)
+            glass.content = hosting
+            glass.update(theme: model.theme)
+            return glass
+        }
+        let vibrancy = NSVisualEffectView()
+        vibrancy.material = model.theme.isDark ? .hudWindow : .windowBackground
+        vibrancy.blendingMode = .behindWindow
+        vibrancy.state = .active
+        hosting.translatesAutoresizingMaskIntoConstraints = false
+        vibrancy.addSubview(hosting)
+        NSLayoutConstraint.activate([
+            hosting.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
+            hosting.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
+            hosting.topAnchor.constraint(equalTo: vibrancy.topAnchor),
+            hosting.bottomAnchor.constraint(equalTo: vibrancy.bottomAnchor),
+        ])
+        return vibrancy
     }
 
     func hide() {
@@ -79,15 +137,15 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView(selection: $tab) {
-            generalTab.tabItem { Label("General", systemImage: "switch.2") }.tag(SettingsTab.general)
-            clipboardTab.tabItem { Label("Clipboard", systemImage: "clipboard") }.tag(SettingsTab.clipboard)
-            assistantTab.tabItem { Label("Assistant", systemImage: "sparkles") }.tag(SettingsTab.assistant)
-            appearanceTab.tabItem { Label("Appearance", systemImage: "paintbrush") }.tag(SettingsTab.appearance)
-            commandsTab.tabItem { Label("Commands", systemImage: "terminal") }.tag(SettingsTab.commands)
+        HStack(spacing: 0) {
+            sidebar
+            Divider()
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .padding(20)
-        .frame(width: 640, height: 560)
+        // Fill the whole window (including the full-size-content titlebar
+        // strip); the sidebar's top padding clears the traffic lights.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             if initialAddPending {
                 initialAddPending = false
@@ -97,6 +155,66 @@ struct SettingsView: View {
             }
         }
         .onDisappear { persist() }
+    }
+
+    /// System-Settings-style shell: an icon sidebar floating on the window's
+    /// Liquid Glass background, with the selected tab's form on the right.
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 9) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 26, height: 26)
+                Text("HeyCast").font(.system(size: 13, weight: .semibold))
+            }
+            // Clears the floating traffic lights in the full-size-content titlebar.
+            .padding(.top, 44)
+            .padding(.bottom, 14)
+
+            ForEach(SettingsTab.allCases, id: \.self) { item in
+                Button {
+                    tab = item
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: item.symbol)
+                            .frame(width: 18)
+                            .foregroundStyle(tab == item ? Color.accentColor : Color.secondary)
+                        Text(item.title)
+                            .font(.system(size: 13, weight: tab == item ? .semibold : .regular))
+                        Spacer()
+                    }
+                    .padding(.vertical, 5)
+                    .padding(.horizontal, 8)
+                    .background {
+                        if tab == item {
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .fill(Color.accentColor.opacity(0.22))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+
+            Spacer()
+            Text("HeyCast \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")")
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .padding(.bottom, 10)
+        }
+        .padding(.horizontal, 12)
+        .frame(width: 186, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        switch tab {
+        case .general: generalTab
+        case .clipboard: clipboardTab
+        case .assistant: assistantTab
+        case .appearance: appearanceTab
+        case .commands: commandsTab
+        }
     }
 
     private func persist() {
@@ -183,6 +301,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: clipboard
@@ -216,6 +335,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: assistant
@@ -278,6 +398,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
         .sheet(item: $agentSheet) { context in
             AgentFormSheet(
                 existing: context.agent,
@@ -488,6 +609,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 
     // MARK: commands
@@ -569,6 +691,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
     }
 }
 
