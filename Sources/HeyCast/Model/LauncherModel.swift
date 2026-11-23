@@ -463,7 +463,7 @@ final class LauncherModel: ObservableObject {
         let claimed = extensions.results(for: rawQuery, phase: .claim, ctx: self)
         if !claimed.isEmpty { return claimed }
 
-        // Partial trigger ("/", "/t", "/gl"…): list the special triggers it
+        // Partial trigger ("/", "/todo", "/gl"…): list the special triggers it
         // could complete to. Once a trigger is complete enough for its owner
         // (claim, agent request) that owner takes over instead.
         let suggestions = triggerSuggestions(for: rawQuery)
@@ -544,7 +544,7 @@ final class LauncherModel: ObservableObject {
         return Array(out.prefix(30))
     }
 
-    /// When the query is a partial trigger — "/", "/t", "/gl", "@h"… — list
+    /// When the query is a partial trigger — "/", "/todo", "/gl", "@h"… — list
     /// the special triggers it could complete to: the TC feed, the note
     /// captures and every agent. The row title IS the trigger (that's what
     /// the user types); the description sits on the right. Selecting a

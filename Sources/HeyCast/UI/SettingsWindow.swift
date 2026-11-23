@@ -151,12 +151,12 @@ struct SettingsView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 triggerField("Assistant — agent alias follows (e.g. \"/hermes …\")",
                              value: $draft.assistantPrefix, fallback: "/", allowEmpty: false)
-                triggerField("Inbox capture — todo/thought (e.g. \"/t fix the tap\")",
-                             value: $draft.notesInboxPrefix, fallback: "/t ", allowEmpty: true)
-                triggerField("Word capture — vocabulary (e.g. \"/w serendipity — luck\")",
-                             value: $draft.notesWordPrefix, fallback: "/w ", allowEmpty: true)
-                triggerField("Note capture — opens the editor (e.g. \"/n Trip plan\")",
-                             value: $draft.notesNotePrefix, fallback: "/n ", allowEmpty: true)
+                triggerField("Inbox capture — todo/thought (e.g. \"/todo fix the tap\")",
+                             value: $draft.notesInboxPrefix, fallback: "/todo ", allowEmpty: true)
+                triggerField("Word capture — vocabulary (e.g. \"/word serendipity — luck\")",
+                             value: $draft.notesWordPrefix, fallback: "/word ", allowEmpty: true)
+                triggerField("Note capture — opens the editor (e.g. \"/note Trip plan\")",
+                             value: $draft.notesNotePrefix, fallback: "/note ", allowEmpty: true)
                 triggerField("Thanh Cong TC feed", value: $draft.tcPrefix, fallback: "/tc", allowEmpty: false)
             }
             Section {

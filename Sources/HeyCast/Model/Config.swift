@@ -131,11 +131,11 @@ struct Config: Codable, Equatable {
     // Trigger prefixes are unified: special triggers always start with "@"
     // or "/" ("/" is the default style). Values saved by older builds that
     // still equal the old defaults migrate to the new slash defaults.
-    var assistantPrefix: String = "/"       // "/alias question" (was "@" hardcoded)
-    var notesInboxPrefix: String = "/t "    // todo/thought capture (was ";")
-    var notesWordPrefix: String = "/w "     // vocabulary capture (was "w ")
-    var notesNotePrefix: String = "/n "     // titled note capture (was "n ")
-    var tcPrefix: String = "/tc"            // Thanh Cong TC feed
+    var assistantPrefix: String = "/"         // "/alias question" (was "@" hardcoded)
+    var notesInboxPrefix: String = "/todo "   // todo/thought capture (was "/t ", then ";")
+    var notesWordPrefix: String = "/word "    // vocabulary capture (was "/w ", then "w ")
+    var notesNotePrefix: String = "/note "    // titled note capture (was "/n ", then "n ")
+    var tcPrefix: String = "/tc"              // Thanh Cong TC feed
     // Thanh Cong TC feed (/tc) — read-only Mighty Networks reader. The data
     // access rules are documented in the thanhcongtc repo
     // (docs/mighty-networks-data-access.md): browser-session cookies in a
@@ -184,9 +184,9 @@ struct Config: Codable, Equatable {
         if let v = try c.decodeIfPresent(Bool.self, forKey: .restoreInputSourceOnClose) { restoreInputSourceOnClose = v }
         if let v = try c.decodeIfPresent([AgentConfig].self, forKey: .agents) { agents = v }
         if let v = try c.decodeIfPresent(String.self, forKey: .defaultAgent) { defaultAgent = v }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = Self.migratedTrigger(v, oldDefault: ";", newDefault: "/t ") }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = Self.migratedTrigger(v, oldDefault: "w ", newDefault: "/w ") }
-        if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = Self.migratedTrigger(v, oldDefault: "n ", newDefault: "/n ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesInboxPrefix) { notesInboxPrefix = Self.migratedTrigger(v, oldDefault: "/t ", newDefault: "/todo ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesWordPrefix) { notesWordPrefix = Self.migratedTrigger(v, oldDefault: "/w ", newDefault: "/word ") }
+        if let v = try c.decodeIfPresent(String.self, forKey: .notesNotePrefix) { notesNotePrefix = Self.migratedTrigger(v, oldDefault: "/n ", newDefault: "/note ") }
         if let v = try c.decodeIfPresent(String.self, forKey: .assistantPrefix) { assistantPrefix = Self.migratedTrigger(v, oldDefault: "", newDefault: "/") }
         if let v = try c.decodeIfPresent(String.self, forKey: .tcPrefix) { tcPrefix = Self.migratedTrigger(v, oldDefault: "", newDefault: "/tc") }
         if let v = try c.decodeIfPresent(String.self, forKey: .tcCookiePath) { tcCookiePath = v }
