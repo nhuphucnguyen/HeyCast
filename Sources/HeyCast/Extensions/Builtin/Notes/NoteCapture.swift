@@ -10,7 +10,10 @@ enum NoteCapture {
     }
 
     /// Matches the configured prefixes. Longer prefixes win so "w " is not
-    /// shadowed by a shorter one.
+    /// shadowed by a shorter one. The note prefix additionally matches in its
+    /// bare form — "/note" with nothing typed after — so it claims the search
+    /// and ↵ can open the Notes view instead of falling through to a
+    /// trigger suggestion.
     static func parse(_ query: String, config: Config) -> Parsed? {
         let prefixes: [(String, NoteItem.Kind)] = [
             (config.notesInboxPrefix, .inbox),
@@ -19,9 +22,15 @@ enum NoteCapture {
         ]
         .filter { !$0.0.isEmpty }
         .sorted { $0.0.count > $1.0.count }
-        for (prefix, kind) in prefixes where query.lowercased().hasPrefix(prefix.lowercased()) {
+        let lowered = query.lowercased()
+        for (prefix, kind) in prefixes where lowered.hasPrefix(prefix.lowercased()) {
             let text = String(query.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
             return Parsed(kind: kind, text: text)
+        }
+        // Bare note prefix ("/note", no trailing space and nothing after).
+        if let notePrefix = prefixes.first(where: { $0.1 == .note })?.0.trimmingCharacters(in: .whitespaces),
+           !notePrefix.isEmpty, lowered == notePrefix.lowercased() {
+            return Parsed(kind: .note, text: "")
         }
         return nil
     }

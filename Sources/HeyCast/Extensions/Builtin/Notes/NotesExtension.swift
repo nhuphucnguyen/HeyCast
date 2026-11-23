@@ -270,6 +270,14 @@ final class NotesExtension: HeyCastExtension, ExtensionPage {
         case .note: verb = "Create Note"; icon = "square.and.pencil"
         }
         guard !parsed.text.isEmpty else {
+            // "/note" with nothing after it opens the Notes view instead of
+            // capturing; the other kinds keep their typing hints.
+            if parsed.kind == .note {
+                return ResultItem(id: "notes-capture-view", title: "View Notes",
+                                  subtitle: "Inbox, words and notes · ↵ to open",
+                                  icon: .symbol("note.text"),
+                                  action: .switchPage(.extension("notes")))
+            }
             let hint: String
             switch parsed.kind {
             case .inbox: hint = "Type a thought to save it for later"
