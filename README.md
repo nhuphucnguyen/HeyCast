@@ -27,7 +27,7 @@ pure Apple frameworks so every feature leans on the platform directly.
   for your password; everything stays recoverable with Put Back. Also
   scriptable: `heycast://uninstall?path=/Applications/Foo.app`
 - Window tiling: 12 positions (halves/quarters/thirds/maximize) for the frontmost window
-- Easter eggs: `randomvar`, `67`, `lemon`, `zombo`, "Ferris Plushies"
+- Easter eggs: `randomvar`, `67`, `lemon`, `zombo`
 
 **Pages** (switch with a search or a result)
 - Main search

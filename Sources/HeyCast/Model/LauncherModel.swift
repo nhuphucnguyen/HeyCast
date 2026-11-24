@@ -632,8 +632,6 @@ final class LauncherModel: ObservableObject {
                        icon: .symbol("arrow.clockwise"), searchName: "reload", action: .reload),
             ResultItem(id: "builtin-version", title: "HeyCast v\(Self.appVersion)", subtitle: "Ready when you are.",
                        icon: .symbol("bolt.fill"), action: .display),
-            ResultItem(id: "builtin-ferris", title: "Ferris Plushies", subtitle: "Easter egg",
-                       icon: .symbol("crown"), action: .openURL(URL(string: "https://ferris.rs")!)),
         ]
         // favourites toggle hint for app rows is handled in the row UI
         out.append(contentsOf: extensions.commands(self))

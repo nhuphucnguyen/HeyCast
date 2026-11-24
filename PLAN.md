@@ -36,7 +36,7 @@ SMAppService, and more.
 - Main search: fuzzy app search, favorites (♥, pinned top), usage ranking,
   web search (`?` suffix or ≥3 words, configurable engine), URL opening,
   calculator, unit conversion (`5 km to mi`), `>` inline shell, quit apps,
-  easter eggs (`randomvar`, `67`, `lemon`, `zombo`, Ferris plushies link).
+  easter eggs (`randomvar`, `67`, `lemon`, `zombo`).
 - Pages: Main, File search, Clipboard history (`cbhist`), Emoji search.
 - Clipboard history: text/URL/image, SQLite-backed, paste-on-select, clear.
 - Emoji page: 6-wide grid, hover tooltip, Enter/click copies.
