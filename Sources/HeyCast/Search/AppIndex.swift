@@ -63,13 +63,24 @@ final class AppIndex {
 
     // MARK: discovery
 
+    /// Apple apps outside the standard directories that Spotlight still lists:
+    /// AirDrop, Network etc. ship inside Finder.app.
+    private static let systemAppDirs = ["/System/Library/CoreServices/Applications",
+                                        "/System/Library/CoreServices/Finder.app/Contents/Applications"]
+    private static let systemApps = ["/System/Library/CoreServices/Finder.app"]
+
     /// Apps directly in the standard app directories, plus one folder level
     /// down (/Applications/Utilities, vendor folders like
     /// /Applications/Bitdefender). Reads the filesystem directly rather than
     /// LaunchServices or Spotlight, which can lag behind a fresh install.
     static func discoverApps() -> [String] {
         let fm = FileManager.default
-        var paths = Set<String>()
+        var paths = Set<String>(systemApps.filter { fm.fileExists(atPath: $0) })
+        for dir in systemAppDirs {
+            for item in (try? fm.contentsOfDirectory(atPath: dir)) ?? [] where item.hasSuffix(".app") {
+                paths.insert(dir + "/" + item)
+            }
+        }
         let scanRoots = ["/Applications", "/System/Applications",
                          NSString(string: "~/Applications").expandingTildeInPath]
         for root in scanRoots {
@@ -90,6 +101,10 @@ final class AppIndex {
     }
 
     static func shouldIncludeApp(_ path: String) -> Bool {
+        if systemApps.contains(path) { return true }
+        if systemAppDirs.contains((path as NSString).deletingLastPathComponent) {
+            return Bundle(path: path)?.object(forInfoDictionaryKey: "LSBackgroundOnly") == nil
+        }
         // Exclude nested bundles (helpers inside another .app).
         if path.dropLast(4).contains(".app/") { return false }
         let excluded = ["/Contents/Library/LoginItems/", "/Contents/XPCServices/",
