@@ -5,13 +5,24 @@ enum ThemeMode: String, Codable, CaseIterable {
 }
 
 enum MainPane: String, Codable, CaseIterable {
-    case blank, favourites, frequentlyUsed, events
+    case blank, favourites, suggested, events
+
+    /// "frequentlyUsed" was the pre-suggestions name of `.suggested`.
+    init?(rawValue: String) {
+        switch rawValue {
+        case "blank": self = .blank
+        case "favourites": self = .favourites
+        case "suggested", "frequentlyUsed": self = .suggested
+        case "events": self = .events
+        default: return nil
+        }
+    }
 
     var displayName: String {
         switch self {
         case .blank: return "HeyCast"
         case .favourites: return "Favourites"
-        case .frequentlyUsed: return "Frequently Used"
+        case .suggested: return "Suggested"
         case .events: return "Events"
         }
     }
@@ -106,7 +117,7 @@ struct Config: Codable, Equatable {
     var showTrayIcon: Bool = true
     var theme: ThemeConfig = ThemeConfig()
     var windowLocation: WindowLocation = .mouseScreenTopCenter
-    var mainPage: MainPane = .blank
+    var mainPage: MainPane = .suggested
     var clearOnHide: Bool = false
     var clearOnEnter: Bool = true
     var startAtLogin: Bool = false
@@ -258,46 +269,6 @@ struct Config: Codable, Equatable {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         if let data = try? encoder.encode(self) {
             try? data.write(to: Self.fileURL, options: .atomic)
-        }
-    }
-}
-
-struct RankingStore {
-    /// search name -> usage count. A count of -1 marks a favourite.
-    private(set) var counts: [String: Int] = [:]
-
-    static var fileURL: URL { Config.directory.appendingPathComponent("ranking.json") }
-
-    static func load() -> RankingStore {
-        guard let data = try? Data(contentsOf: Self.fileURL),
-              let dict = try? JSONDecoder().decode([String: Int].self, from: data) else {
-            return RankingStore()
-        }
-        return RankingStore(counts: dict)
-    }
-
-    func save() {
-        try? FileManager.default.createDirectory(at: Config.directory, withIntermediateDirectories: true)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        if let data = try? encoder.encode(counts) {
-            try? data.write(to: Self.fileURL, options: .atomic)
-        }
-    }
-
-    func isFavorite(_ name: String) -> Bool { counts[name] == -1 }
-    func usage(of name: String) -> Int { max(0, counts[name] ?? 0) }
-
-    mutating func bump(_ name: String) {
-        let current = counts[name] ?? 0
-        counts[name] = current < 0 ? current : current + 1
-    }
-
-    mutating func toggleFavorite(_ name: String) {
-        if counts[name] == -1 {
-            counts[name] = 0
-        } else {
-            counts[name] = -1
         }
     }
 }

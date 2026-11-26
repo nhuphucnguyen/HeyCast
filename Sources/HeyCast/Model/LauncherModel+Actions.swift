@@ -10,10 +10,10 @@ extension LauncherModel {
             return
         }
         closeActionPanel()
+        recordUse(of: item, action: action)
         switch action.kind {
         case let .launchApp(url, searchName):
             NSWorkspace.shared.open(url)
-            ranking.bump(searchName)
             afterOpen(searchName: searchName, hideWindow: true)
 
         case let .askAgent(alias, text):
@@ -37,6 +37,9 @@ extension LauncherModel {
 
         case .toggleFavorite:
             toggleFavorite(item)
+
+        case .resetRanking:
+            resetRanking(item)
 
         case .uninstall(let url):
             beginUninstall(appPath: url.path)
@@ -78,8 +81,8 @@ extension LauncherModel {
         }
     }
 
-    static func appActions(url: URL, searchName: String, favorite: Bool) -> [ItemAction] {
-        [
+    static func appActions(url: URL, searchName: String, favorite: Bool, learned: Bool) -> [ItemAction] {
+        var actions = [
             ItemAction("Open Application", symbolName: "arrow.up.forward.app",
                        kind: .launchApp(url, searchName: searchName)),
             ItemAction(symbolName: "folder", shortcut: ActionShortcut(key: "f", modifiers: [.command, .shift]),
@@ -91,6 +94,11 @@ extension LauncherModel {
             ItemAction(symbolName: "trash", shortcut: ActionShortcut(key: "x", modifiers: [.control]),
                        style: .destructive, kind: .uninstall(url)),
         ]
+        if learned {
+            actions.insert(ItemAction("Reset Ranking", symbolName: "arrow.counterclockwise", kind: .resetRanking),
+                           at: actions.count - 1)
+        }
+        return actions
     }
 
     // MARK: - action panel

@@ -262,6 +262,11 @@ struct SettingsView: View {
                     }
                 }
                 .onChange(of: draft.mainPage) { _ in persist() }
+                LabeledContent("Ranking") {
+                    Button("Clear Learned Ranking") { model.resetAllRanking() }
+                }
+                Text("Search and Suggested learn from what you open, fading after a few weeks of disuse. Favourites are kept.")
+                    .font(.caption).foregroundStyle(.secondary)
                 Toggle("Show tray icon", isOn: $draft.showTrayIcon).onChange(of: draft.showTrayIcon) { _ in persist() }
             }
             Section("Search triggers") {

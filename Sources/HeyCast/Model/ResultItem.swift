@@ -32,6 +32,7 @@ enum ResultAction: Equatable {
     case copyText(String)
     case showInFinder(URL)
     case toggleFavorite
+    case resetRanking     // forget what was learned about this row
     case uninstall(URL)
     case quitApp(String)
     case quitAll

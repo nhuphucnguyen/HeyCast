@@ -10,6 +10,7 @@ struct WindowTilingExtension: HeyCastExtension {
                        title: tile.displayName,
                        subtitle: "Window Tiling",
                        icon: .symbol(tile.symbolName),
+                       searchName: "tile:\(tile.rawValue)",
                        action: .extension(id: id, key: "tile", payload: tile.rawValue))
         }
     }

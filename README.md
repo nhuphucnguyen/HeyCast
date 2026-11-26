@@ -12,7 +12,8 @@ pure Apple frameworks so every feature leans on the platform directly.
 
 **Search & launch**
 - Fuzzy search across every installed app (LaunchServices discovery, real app icons)
-- Usage ranking + ♥ favourites (pinned, persisted)
+- Learned ranking: search and the empty page adapt to what you open (frecency
+  with a 10-day half-life, per-query picks, time-of-day), plus ♥ favourites
 - Calculator (`12*3+2`, `sqrt(2)`, `sin(pi/2)`, `2^10` — safe recursive-descent parser)
 - Unit conversion (`5 km to mi`, `100 f to c`, or `3 tbsp` for all sibling units) via Foundation `Measurement`
 - Web search: end a query with `?` (or type ≥ 3 words) — configurable engine (default DuckDuckGo)
@@ -160,11 +161,11 @@ reload automatically). Notable keys: `toggleHotkey` / `clipboardHotkey`
 pretty symbols `⌘⌥⌃⇧` work too, F1–F12 may stand alone, an empty string
 disables the hotkey; Settings records combos with a click-and-press field),
 `placeholder`,
-`searchURL` (`%s` is the query), `mainPage` (`blank` / `favourites` /
-`frequentlyUsed` / `events`), `windowLocation`, `theme` (mode, blur, colors,
+`searchURL` (`%s` is the query), `mainPage` (`suggested` / `blank` / `favourites` /
+`events`), `windowLocation`, `theme` (mode, blur, colors,
 font), `shells` (`{command, alias, hotkey?}`), `modes` (`name → script`),
-`aliases` (`input → expanded query`), `blacklist`, `searchDirs`. Usage ranking
-lives in `ranking.json` next to it, clipboard history in `clipboard.db`, notes in `notes.db`.
+`aliases` (`input → expanded query`), `blacklist`, `searchDirs`. Learned ranking
+lives in `usage.json` next to it (migrated once from the old `ranking.json`), clipboard history in `clipboard.db`, notes in `notes.db`.
 Search triggers all start with `@` or `/` (Settings → General → Search
 triggers, or these keys): `assistantPrefix` (default `/` — `"/alias question"`
 routes to that agent), `notesInboxPrefix` / `notesWordPrefix` /
@@ -194,8 +195,10 @@ packaging in `scripts/`.
 
 ## Deviations from RustCast
 
-- Favourites sort **above** other results (Raycast/Alfred convention)
-- Empty query shows core built-ins instead of a blank pane
+- Results rank by match quality plus learned usage; favourites get a boost
+  rather than always sorting first
+- Empty query shows suggestions (favourites, then what you use lately and at
+  this hour); core built-ins until anything has been learned
 - No auto-updater yet
 - Window tiling prompts for Accessibility permission on first use (same as the
   original); haptic tick on failure

@@ -53,9 +53,15 @@ final class LauncherModel: ObservableObject {
             }
         }
     }
-    var ranking: RankingStore {
+    var ranking: UsageStore {
         didSet { scheduleRankingSave() }
     }
+    /// Suggestion order from the previous time the empty page was built —
+    /// kept items get a small bonus so the list doesn't reshuffle over
+    /// near-ties (stable beats clever for muscle memory).
+    private var lastSuggestionKeys: [String] = []
+    /// Suggestions are computed once per panel show, not on every refresh.
+    private var sessionSuggestions: [ResultItem]?
 
     // MARK: services
     let appIndex = AppIndex()
@@ -86,7 +92,7 @@ final class LauncherModel: ObservableObject {
 
     init() {
         config = Config.load()
-        ranking = RankingStore.load()
+        ranking = UsageStore.load()
         theme = Theme.resolve(config: config, systemDark: NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua)
 
         observeSystemAppearance()
@@ -124,6 +130,7 @@ final class LauncherModel: ObservableObject {
 
     func show(to targetPage: Page = .main) {
         frontmostApp = NSWorkspace.shared.frontmostApplication
+        sessionSuggestions = nil
         if config.restoreInputSourceOnClose {
             savedInputSource = InputSourceService.currentSourceID()
         }
@@ -410,13 +417,12 @@ final class LauncherModel: ObservableObject {
                 .sorted { $0.name < $1.name }
                 .map { self.result(for: $0) }
             return favs.isEmpty ? builtinResults().filter { $0.action != .display } : favs + builtinResults()
-        case .frequentlyUsed:
-            let ranked = appIndex.apps
-                .filter { ranking.usage(of: $0.searchName) > 0 }
-                .sorted { ranking.usage(of: $0.searchName) > ranking.usage(of: $1.searchName) }
-                .prefix(5)
-                .map { self.result(for: $0) }
-            return ranked
+        case .suggested:
+            if let cached = sessionSuggestions { return cached }
+            let rows = suggestedResults()
+            // Wait for the app index before freezing the list for this show.
+            if !appIndex.apps.isEmpty { sessionSuggestions = rows }
+            return rows
         case .events:
             // The calendar permission prompt fires here — the first time the
             // user actually engages the Events page — and the list refreshes
@@ -437,6 +443,62 @@ final class LauncherModel: ObservableObject {
         }
     }
 
+    private func shellResult(_ shell: ShellCommandConfig) -> ResultItem {
+        ResultItem(id: "shell-\(shell.alias)",
+                   title: shell.alias,
+                   subtitle: "Shell Command",
+                   icon: .symbol("terminal"),
+                   searchName: "shell:\(shell.alias)",
+                   action: .runShell(shell.command))
+    }
+
+    private func modeResult(_ name: String, _ command: String) -> ResultItem {
+        ResultItem(id: "mode-\(name)",
+                   title: "\(name.capitalized) Mode",
+                   subtitle: "Switch Modes",
+                   icon: .symbol("switch.2"),
+                   searchName: "mode:\(name)",
+                   action: .runShell(command))
+    }
+
+    static let suggestionLimit = 8
+
+    /// The empty page: favourites pinned first (in a fixed order), then what
+    /// is used most lately, tilted towards what is usually opened at this
+    /// hour. The app the launcher was summoned from is left out — it's
+    /// already open. With nothing learned yet it shows the built-in commands.
+    private func suggestedResults() -> [ResultItem] {
+        var byKey: [String: ResultItem] = [:]
+        for app in appIndex.apps { byKey[app.searchName] = result(for: app) }
+        for shell in config.shells { let r = shellResult(shell); byKey[r.searchName!] = r }
+        for (name, command) in config.modes { let r = modeResult(name, command); byKey[r.searchName!] = r }
+        for builtin in builtinResults() {
+            if let key = builtin.searchName { byKey[key] = byKey[key] ?? builtin }
+        }
+
+        let frontmostKey = frontmostApp?.bundleURL.flatMap { url in
+            appIndex.apps.first { $0.path == url.path }?.searchName
+        }
+        let favourites = ranking.favorites.sorted()
+            .filter { $0 != frontmostKey }
+            .compactMap { byKey[$0] }
+
+        let now = Date.now
+        let previous = Set(lastSuggestionKeys)
+        var candidates: [(key: String, score: Double)] = []
+        for key in ranking.items.keys
+        where !ranking.isFavorite(key) && key != frontmostKey && byKey[key] != nil {
+            let stickiness: Double = previous.contains(key) ? 1.15 : 1
+            candidates.append((key, ranking.suggestionScore(key, now: now) * stickiness))
+        }
+        candidates.sort { $0.score != $1.score ? $0.score > $1.score : $0.key < $1.key }
+        let learned = candidates.prefix(max(0, Self.suggestionLimit - favourites.count)).map(\.key)
+        lastSuggestionKeys = learned
+
+        let rows = favourites + learned.compactMap { byKey[$0] }
+        return rows.isEmpty ? builtinResults() : rows
+    }
+
     private func result(for entry: AppIndex.Entry) -> ResultItem {
         ResultItem(id: "app-\(entry.path)",
                    title: entry.name,
@@ -446,7 +508,8 @@ final class LauncherModel: ObservableObject {
                    searchName: entry.searchName,
                    actions: Self.appActions(url: URL(fileURLWithPath: entry.path),
                                             searchName: entry.searchName,
-                                            favorite: ranking.isFavorite(entry.searchName)))
+                                            favorite: ranking.isFavorite(entry.searchName),
+                                            learned: ranking.hasUsage(entry.searchName)))
     }
 
     private func searchResults(for rawQuery: String) -> [ResultItem] {
@@ -469,50 +532,38 @@ final class LauncherModel: ObservableObject {
         let suggestions = triggerSuggestions(for: rawQuery)
         if !suggestions.isEmpty { return suggestions }
 
-        var out: [ResultItem] = []
-
-        // App fuzzy search
-        let matches = appIndex.search(query)
-        for (entry, score) in matches.prefix(30) {
-            let usageBoost = ranking.usage(of: entry.searchName) * 2
-            let favBoost = ranking.isFavorite(entry.searchName) ? 10_000 : 0
-            _ = score + usageBoost + favBoost
-            out.append(result(for: entry))
+        // Apps, shells, modes and commands compete on one score: fuzzy
+        // match quality plus what was learned from past picks (UsageStore).
+        // Ties keep the order they were gathered in.
+        var scored: [(item: ResultItem, score: Int)] = []
+        func add(_ item: ResultItem, _ match: Int) {
+            let boost = item.searchName.map { ranking.searchBoost($0, query: rawQuery) } ?? 0
+            scored.append((item, match + boost))
         }
 
-        // Shell commands
+        for (entry, score) in appIndex.search(query).prefix(60) {
+            add(result(for: entry), score)
+        }
         for shell in config.shells {
             if let s = FuzzyMatch.score(query, shell.alias.lowercased()) {
-                out.append(ResultItem(id: "shell-\(shell.alias)",
-                                      title: shell.alias,
-                                      subtitle: "Shell Command",
-                                      icon: .symbol("terminal"),
-                                      searchName: "shell:\(shell.alias)",
-                                      action: .runShell(shell.command)))
-                _ = s
+                add(shellResult(shell), s)
             }
         }
-
-        // Modes
         for (name, command) in config.modes.sorted(by: { $0.key < $1.key }) {
             if let s = FuzzyMatch.score(query, "\(name) mode") {
-                out.append(ResultItem(id: "mode-\(name)",
-                                      title: "\(name.capitalized) Mode",
-                                      subtitle: "Switch Modes",
-                                      icon: .symbol("switch.2"),
-                                      searchName: "mode:\(name)",
-                                      action: .runShell(command)))
-                _ = s
+                add(modeResult(name, command), s)
+            }
+        }
+        for builtin in builtinResults() {
+            if let s = FuzzyMatch.score(query, builtin.title.lowercased()) {
+                add(builtin, s)
             }
         }
 
-        // Builtins
-        for builtin in builtinResults() {
-            if let s = FuzzyMatch.score(query, builtin.title.lowercased()) {
-                out.append(builtin)
-                _ = s
-            }
+        let order: [Int] = scored.indices.sorted { a, b in
+            scored[a].score != scored[b].score ? scored[a].score > scored[b].score : a < b
         }
+        var out: [ResultItem] = order.map { scored[$0].item }
 
         out.append(contentsOf: extensions.results(for: query, phase: .search, ctx: self))
 
@@ -650,7 +701,34 @@ final class LauncherModel: ObservableObject {
             hide()
             if config.clearOnEnter { query = "" }
         }
-        _ = searchName
+    }
+
+    /// Learn from the main page's primary (↵) action on a rankable row —
+    /// one with a `searchName`. Secondary actions (Show in Finder, Copy
+    /// Path, Uninstall…) and utility rows (quit, triggers) don't count.
+    func recordUse(of item: ResultItem, action: ItemAction) {
+        guard page == .main, let key = item.searchName,
+              action == item.actions.first else { return }
+        switch action.kind {
+        case .launchApp, .openURL, .runShell, .switchPage, .openSettings, .reload, .extension:
+            ranking.recordUse(key, query: query)
+        default:
+            break
+        }
+    }
+
+    func resetRanking(_ item: ResultItem) {
+        guard let key = item.searchName else { return }
+        ranking.reset(key)
+        sessionSuggestions = nil
+        refreshResults()
+    }
+
+    func resetAllRanking() {
+        ranking.resetAll()
+        sessionSuggestions = nil
+        lastSuggestionKeys = []
+        refreshResults()
     }
 
     func copyText(_ text: String) {
@@ -692,6 +770,7 @@ final class LauncherModel: ObservableObject {
     func toggleFavorite(_ item: ResultItem) {
         guard let name = item.searchName else { return }
         ranking.toggleFavorite(name)
+        sessionSuggestions = nil
         refreshResults()
     }
 
